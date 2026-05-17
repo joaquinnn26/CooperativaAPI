@@ -31,6 +31,35 @@
         <AssociationConnector Association="CooperativaModel.FK__ServicioS__idSoc__4D94879B" ManuallyRouted="false" />
         <EntityTypeShape EntityType="CooperativaModel.sysdiagrams" Width="1.5" PointX="10.375" PointY="4.75" />
         <AssociationConnector Association="CooperativaModel.FK_UsuarioSistema_Socios" />
+        <EntityTypeShape EntityType="CooperativaModel.EstadoTurno" Width="1.5" PointX="3" PointY="19.875" />
+        <EntityTypeShape EntityType="CooperativaModel.Medicion" Width="1.5" PointX="12.75" PointY="6" />
+        <EntityTypeShape EntityType="CooperativaModel.TipoLectura" Width="1.5" PointX="10.5" PointY="2.25" />
+        <EntityTypeShape EntityType="CooperativaModel.Turno" Width="1.5" PointX="5.25" PointY="12.25" />
+        <AssociationConnector Association="CooperativaModel.FK_Medicion_Empleado" />
+        <AssociationConnector Association="CooperativaModel.FK_Turno_Estado" />
+        <AssociationConnector Association="CooperativaModel.FK_Medicion_ServicioSocio" />
+        <AssociationConnector Association="CooperativaModel.FK_Medicion_TipoLectura" />
+        <AssociationConnector Association="CooperativaModel.FK_Turno_Socio" />
+        <EntityTypeShape EntityType="CooperativaModel.TipoMedidor" Width="1.5" PointX="5.375" PointY="0.875" />
+        <EntityTypeShape EntityType="CooperativaModel.Medidor" Width="1.5" PointX="10.5" PointY="7.75" />
+        <AssociationConnector Association="CooperativaModel.FK_Medicion_Medidor" />
+        <AssociationConnector Association="CooperativaModel.FK_Medidor_ServicioSocio" />
+        <AssociationConnector Association="CooperativaModel.FK_Medidor_TipoMedidor" />
+        <EntityTypeShape EntityType="CooperativaModel.DocumentoSolicitud" Width="1.5" PointX="10.5" PointY="12.375" />
+        <EntityTypeShape EntityType="CooperativaModel.EstadoSolicitudServicio" Width="1.5" PointX="6" PointY="20.5" />
+        <EntityTypeShape EntityType="CooperativaModel.HistorialEstadoSolicitud" Width="1.5" PointX="8.25" PointY="1.125" />
+        <EntityTypeShape EntityType="CooperativaModel.RequisitoServicio" Width="1.5" PointX="8.25" PointY="16.625" />
+        <EntityTypeShape EntityType="CooperativaModel.SolicitudServicio" Width="1.5" PointX="8.25" PointY="12" />
+        <AssociationConnector Association="CooperativaModel.FK_DocumentoSolicitud_Requisito" />
+        <AssociationConnector Association="CooperativaModel.FK_DocumentoSolicitud_Solicitud" />
+        <AssociationConnector Association="CooperativaModel.FK_HistorialSolicitud_Empleado" />
+        <AssociationConnector Association="CooperativaModel.FK_SolicitudServicio_Empleado" />
+        <AssociationConnector Association="CooperativaModel.FK_HistorialSolicitud_Estado" />
+        <AssociationConnector Association="CooperativaModel.FK_SolicitudServicio_Estado" />
+        <AssociationConnector Association="CooperativaModel.FK_HistorialSolicitud_Solicitud" />
+        <AssociationConnector Association="CooperativaModel.FK_RequisitoServicio_Servicio" />
+        <AssociationConnector Association="CooperativaModel.FK_SolicitudServicio_Servicio" />
+        <AssociationConnector Association="CooperativaModel.FK_SolicitudServicio_Socio" />
       </Diagram>
     </edmx:Diagrams>
   </edmx:Designer>

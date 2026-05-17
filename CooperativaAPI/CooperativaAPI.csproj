@@ -199,21 +199,42 @@
       <DependentUpon>Model1.tt</DependentUpon>
     </Compile>
     <Compile Include="Controllers\AuthController.cs" />
+    <Compile Include="Controllers\CargoController.cs" />
+    <Compile Include="Controllers\DocumentoSolicitudController.cs" />
+    <Compile Include="Controllers\EmpleadoController.cs" />
+    <Compile Include="Controllers\EstadoSolicitudController.cs" />
     <Compile Include="Controllers\HomeController.cs" />
+    <Compile Include="Controllers\MedicionController.cs" />
+    <Compile Include="Controllers\MedidorController.cs" />
+    <Compile Include="Controllers\PersonaController.cs" />
     <Compile Include="Controllers\ReclamoController.cs" />
+    <Compile Include="Controllers\RequisitoServicioController.cs" />
     <Compile Include="Controllers\ServicioController.cs" />
     <Compile Include="Controllers\ServicioSocioController.cs" />
     <Compile Include="Controllers\SocioController.cs" />
+    <Compile Include="Controllers\SolicitudServicioController.cs" />
+    <Compile Include="Controllers\TipoLecturaController.cs" />
+    <Compile Include="Controllers\TipoMedidorController.cs" />
+    <Compile Include="Controllers\TipoTarifaController.cs" />
     <Compile Include="Controllers\ValuesController.cs" />
     <Compile Include="C__MigrationHistory.cs">
       <DependentUpon>Model1.tt</DependentUpon>
     </Compile>
     <Compile Include="Data\AppDbContext.cs" />
+    <Compile Include="DocumentoSolicitud.cs">
+      <DependentUpon>Model1.tt</DependentUpon>
+    </Compile>
     <Compile Include="DTOs\LoginRequest.cs" />
     <Compile Include="Empleado.cs">
       <DependentUpon>Model1.tt</DependentUpon>
     </Compile>
     <Compile Include="EstadoReclamo.cs">
+      <DependentUpon>Model1.tt</DependentUpon>
+    </Compile>
+    <Compile Include="EstadoSolicitudServicio.cs">
+      <DependentUpon>Model1.tt</DependentUpon>
+    </Compile>
+    <Compile Include="EstadoTurno.cs">
       <DependentUpon>Model1.tt</DependentUpon>
     </Compile>
     <Compile Include="Filters\JwtAuthorizeAttribute.cs" />
@@ -222,6 +243,15 @@
     </Compile>
     <Compile Include="Helpers\JwtHelper.cs" />
     <Compile Include="Helpers\PasswordHelpers.cs" />
+    <Compile Include="HistorialEstadoSolicitud.cs">
+      <DependentUpon>Model1.tt</DependentUpon>
+    </Compile>
+    <Compile Include="Medicion.cs">
+      <DependentUpon>Model1.tt</DependentUpon>
+    </Compile>
+    <Compile Include="Medidor.cs">
+      <DependentUpon>Model1.tt</DependentUpon>
+    </Compile>
     <Compile Include="Model1.Context.cs">
       <AutoGen>True</AutoGen>
       <DesignTime>True</DesignTime>
@@ -245,6 +275,9 @@
     <Compile Include="Reclamo.cs">
       <DependentUpon>Model1.tt</DependentUpon>
     </Compile>
+    <Compile Include="RequisitoServicio.cs">
+      <DependentUpon>Model1.tt</DependentUpon>
+    </Compile>
     <Compile Include="Rol.cs">
       <DependentUpon>Model1.tt</DependentUpon>
     </Compile>
@@ -257,6 +290,9 @@
     <Compile Include="Socio.cs">
       <DependentUpon>Model1.tt</DependentUpon>
     </Compile>
+    <Compile Include="SolicitudServicio.cs">
+      <DependentUpon>Model1.tt</DependentUpon>
+    </Compile>
     <Compile Include="sp_helpdiagramdefinition_Result.cs">
       <DependentUpon>Model1.tt</DependentUpon>
     </Compile>
@@ -266,10 +302,19 @@
     <Compile Include="sysdiagrams.cs">
       <DependentUpon>Model1.tt</DependentUpon>
     </Compile>
+    <Compile Include="TipoLectura.cs">
+      <DependentUpon>Model1.tt</DependentUpon>
+    </Compile>
+    <Compile Include="TipoMedidor.cs">
+      <DependentUpon>Model1.tt</DependentUpon>
+    </Compile>
     <Compile Include="TipoReclamo.cs">
       <DependentUpon>Model1.tt</DependentUpon>
     </Compile>
     <Compile Include="TipoTarifa.cs">
+      <DependentUpon>Model1.tt</DependentUpon>
+    </Compile>
+    <Compile Include="Turno.cs">
       <DependentUpon>Model1.tt</DependentUpon>
     </Compile>
     <Compile Include="UsuarioSistema.cs">
@@ -346,6 +391,18 @@
   </ItemGroup>
   <ItemGroup>
     <Folder Include="App_Data\" />
+    <Folder Include="Views\Cargo\" />
+    <Folder Include="Views\DocumentoSolicitud\" />
+    <Folder Include="Views\Empleado\" />
+    <Folder Include="Views\EstadoSolicitud\" />
+    <Folder Include="Views\Medicion\" />
+    <Folder Include="Views\Medidor\" />
+    <Folder Include="Views\Persona\" />
+    <Folder Include="Views\RequisitoServicio\" />
+    <Folder Include="Views\SolicitudServicio\" />
+    <Folder Include="Views\TipoLectura\" />
+    <Folder Include="Views\TipoMedidor\" />
+    <Folder Include="Views\TipoTarifa\" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="fonts\glyphicons-halflings-regular.woff2" />

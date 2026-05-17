@@ -10,6 +10,7 @@ namespace CooperativaAPI.Controllers
     {
         private CooperativaEntities db = new CooperativaEntities();
 
+        // GET
         [HttpGet]
         [Route("")]
         public IHttpActionResult GetAll()
@@ -21,7 +22,10 @@ namespace CooperativaAPI.Controllers
                     {
                         s.idServicio,
                         s.Nombre,
-                        s.Descripcion
+                        s.Descripcion,
+                        s.idTipoTarifa,
+                        TipoTarifa = s.TipoTarifa.NombreTipo,
+                        s.TarifaBase
                     })
                     .ToList();
 
@@ -33,20 +37,26 @@ namespace CooperativaAPI.Controllers
             }
         }
 
-       
+        // POST
         [HttpPost]
         [Route("")]
         public IHttpActionResult Crear([FromBody] Servicio servicio)
         {
             try
             {
-                if (servicio == null || string.IsNullOrWhiteSpace(servicio.Nombre))
+                if (servicio == null)
                     return BadRequest("Datos inválidos.");
+
+                if (string.IsNullOrWhiteSpace(servicio.Nombre))
+                    return BadRequest("El nombre es obligatorio.");
 
                 db.Servicio.Add(servicio);
                 db.SaveChanges();
 
-                return Ok(new { message = "Servicio creado correctamente." });
+                return Ok(new
+                {
+                    message = "Servicio creado correctamente."
+                });
             }
             catch (Exception ex)
             {
@@ -54,7 +64,7 @@ namespace CooperativaAPI.Controllers
             }
         }
 
-       
+        // PUT
         [HttpPut]
         [Route("{id:int}")]
         public IHttpActionResult Editar(int id, [FromBody] Servicio servicioEditado)
@@ -62,13 +72,21 @@ namespace CooperativaAPI.Controllers
             try
             {
                 var servicio = db.Servicio.Find(id);
-                if (servicio == null) return NotFound();
+
+                if (servicio == null)
+                    return NotFound();
 
                 servicio.Nombre = servicioEditado.Nombre;
                 servicio.Descripcion = servicioEditado.Descripcion;
+                servicio.idTipoTarifa = servicioEditado.idTipoTarifa;
+                servicio.TarifaBase = servicioEditado.TarifaBase;
 
                 db.SaveChanges();
-                return Ok(new { message = "Servicio actualizado correctamente." });
+
+                return Ok(new
+                {
+                    message = "Servicio actualizado correctamente."
+                });
             }
             catch (Exception ex)
             {
@@ -76,7 +94,7 @@ namespace CooperativaAPI.Controllers
             }
         }
 
-
+        // DELETE
         [HttpDelete]
         [Route("{id:int}")]
         public IHttpActionResult Eliminar(int id)
@@ -84,12 +102,17 @@ namespace CooperativaAPI.Controllers
             try
             {
                 var servicio = db.Servicio.Find(id);
-                if (servicio == null) return NotFound();
+
+                if (servicio == null)
+                    return NotFound();
 
                 db.Servicio.Remove(servicio);
                 db.SaveChanges();
 
-                return Ok(new { message = "Servicio eliminado correctamente." });
+                return Ok(new
+                {
+                    message = "Servicio eliminado correctamente."
+                });
             }
             catch (Exception ex)
             {

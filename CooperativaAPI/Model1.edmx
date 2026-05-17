@@ -22,6 +22,20 @@
           <Property Name="idCargo" Type="int" StoreGeneratedPattern="Identity" Nullable="false" />
           <Property Name="NombreCargo" Type="varchar" MaxLength="50" Nullable="false" />
         </EntityType>
+        <EntityType Name="DocumentoSolicitud">
+          <Key>
+            <PropertyRef Name="idDocumentoSolicitud" />
+          </Key>
+          <Property Name="idDocumentoSolicitud" Type="int" StoreGeneratedPattern="Identity" Nullable="false" />
+          <Property Name="idSolicitudServicio" Type="int" Nullable="false" />
+          <Property Name="idRequisitoServicio" Type="int" />
+          <Property Name="NombreArchivo" Type="varchar" MaxLength="300" Nullable="false" />
+          <Property Name="RutaArchivo" Type="varchar" MaxLength="1000" Nullable="false" />
+          <Property Name="TipoArchivo" Type="varchar" MaxLength="50" Nullable="false" />
+          <Property Name="FechaSubida" Type="datetime" Nullable="false" />
+          <Property Name="Observaciones" Type="varchar" MaxLength="500" />
+          <Property Name="Aprobado" Type="bit" />
+        </EntityType>
         <EntityType Name="Empleado">
           <Key>
             <PropertyRef Name="idEmpleado" />
@@ -38,6 +52,59 @@
           </Key>
           <Property Name="idEstadoReclamo" Type="int" StoreGeneratedPattern="Identity" Nullable="false" />
           <Property Name="NombreEstado" Type="varchar" MaxLength="50" Nullable="false" />
+        </EntityType>
+        <EntityType Name="EstadoSolicitudServicio">
+          <Key>
+            <PropertyRef Name="idEstadoSolicitud" />
+          </Key>
+          <Property Name="idEstadoSolicitud" Type="int" StoreGeneratedPattern="Identity" Nullable="false" />
+          <Property Name="NombreEstado" Type="varchar" MaxLength="50" Nullable="false" />
+        </EntityType>
+        <EntityType Name="EstadoTurno">
+          <Key>
+            <PropertyRef Name="idEstadoTurno" />
+          </Key>
+          <Property Name="idEstadoTurno" Type="int" StoreGeneratedPattern="Identity" Nullable="false" />
+          <Property Name="NombreEstado" Type="varchar" MaxLength="50" Nullable="false" />
+        </EntityType>
+        <EntityType Name="HistorialEstadoSolicitud">
+          <Key>
+            <PropertyRef Name="idHistorialEstadoSolicitud" />
+          </Key>
+          <Property Name="idHistorialEstadoSolicitud" Type="int" StoreGeneratedPattern="Identity" Nullable="false" />
+          <Property Name="idSolicitudServicio" Type="int" Nullable="false" />
+          <Property Name="idEstadoSolicitud" Type="int" Nullable="false" />
+          <Property Name="idEmpleado" Type="int" />
+          <Property Name="FechaCambio" Type="datetime" Nullable="false" />
+          <Property Name="Observaciones" Type="varchar" MaxLength="1000" />
+        </EntityType>
+        <EntityType Name="Medicion">
+          <Key>
+            <PropertyRef Name="idMedicion" />
+          </Key>
+          <Property Name="idMedicion" Type="int" StoreGeneratedPattern="Identity" Nullable="false" />
+          <Property Name="idServicioSocio" Type="int" Nullable="false" />
+          <Property Name="idEmpleado" Type="int" Nullable="false" />
+          <Property Name="idMedidor" Type="int" Nullable="false" />
+          <Property Name="idTipoLectura" Type="int" Nullable="false" />
+          <Property Name="FechaLectura" Type="date" Nullable="false" />
+          <Property Name="FechaCarga" Type="datetime" />
+          <Property Name="ValorLectura" Type="decimal" Precision="10" Scale="2" Nullable="false" />
+          <Property Name="ConsumoCalculado" Type="decimal" Precision="10" Scale="2" />
+          <Property Name="Periodo" Type="varchar" MaxLength="10" />
+          <Property Name="FotoURL" Type="varchar" MaxLength="255" />
+          <Property Name="Observaciones" Type="varchar" MaxLength="255" />
+        </EntityType>
+        <EntityType Name="Medidor">
+          <Key>
+            <PropertyRef Name="idMedidor" />
+          </Key>
+          <Property Name="idMedidor" Type="int" StoreGeneratedPattern="Identity" Nullable="false" />
+          <Property Name="Numero" Type="varchar" MaxLength="50" Nullable="false" />
+          <Property Name="idServicioSocio" Type="int" Nullable="false" />
+          <Property Name="Activo" Type="bit" Nullable="false" />
+          <Property Name="idTipoMedidor" Type="int" Nullable="false" />
+          <Property Name="FechaInstalacion" Type="datetime" />
         </EntityType>
         <EntityType Name="Persona">
           <Key>
@@ -64,6 +131,17 @@
           <Property Name="idEstadoReclamo" Type="int" Nullable="false" />
           <Property Name="Activo" Type="bit" Nullable="false" />
           <Property Name="Imagen" Type="nvarchar(max)" />
+        </EntityType>
+        <EntityType Name="RequisitoServicio">
+          <Key>
+            <PropertyRef Name="idRequisitoServicio" />
+          </Key>
+          <Property Name="idRequisitoServicio" Type="int" StoreGeneratedPattern="Identity" Nullable="false" />
+          <Property Name="idServicio" Type="int" Nullable="false" />
+          <Property Name="Nombre" Type="varchar" MaxLength="200" Nullable="false" />
+          <Property Name="Descripcion" Type="varchar" MaxLength="500" />
+          <Property Name="Obligatorio" Type="bit" Nullable="false" />
+          <Property Name="Activo" Type="bit" Nullable="false" />
         </EntityType>
         <EntityType Name="Rol">
           <Key>
@@ -103,6 +181,20 @@
           <Property Name="FechaAlta" Type="date" Nullable="false" />
           <Property Name="Activo" Type="bit" />
         </EntityType>
+        <EntityType Name="SolicitudServicio">
+          <Key>
+            <PropertyRef Name="idSolicitudServicio" />
+          </Key>
+          <Property Name="idSolicitudServicio" Type="int" StoreGeneratedPattern="Identity" Nullable="false" />
+          <Property Name="idSocio" Type="int" Nullable="false" />
+          <Property Name="idServicio" Type="int" Nullable="false" />
+          <Property Name="idEstadoSolicitud" Type="int" Nullable="false" />
+          <Property Name="FechaSolicitud" Type="datetime" Nullable="false" />
+          <Property Name="Observaciones" Type="varchar" MaxLength="1000" />
+          <Property Name="FechaResolucion" Type="datetime" />
+          <Property Name="idEmpleadoRevisor" Type="int" />
+          <Property Name="MotivoRechazo" Type="varchar" MaxLength="1000" />
+        </EntityType>
         <EntityType Name="sysdiagrams">
           <Key>
             <PropertyRef Name="diagram_id" />
@@ -112,6 +204,20 @@
           <Property Name="diagram_id" Type="int" StoreGeneratedPattern="Identity" Nullable="false" />
           <Property Name="version" Type="int" />
           <Property Name="definition" Type="varbinary(max)" />
+        </EntityType>
+        <EntityType Name="TipoLectura">
+          <Key>
+            <PropertyRef Name="idTipoLectura" />
+          </Key>
+          <Property Name="idTipoLectura" Type="int" StoreGeneratedPattern="Identity" Nullable="false" />
+          <Property Name="Nombre" Type="varchar" MaxLength="50" Nullable="false" />
+        </EntityType>
+        <EntityType Name="TipoMedidor">
+          <Key>
+            <PropertyRef Name="idTipoMedidor" />
+          </Key>
+          <Property Name="idTipoMedidor" Type="int" StoreGeneratedPattern="Identity" Nullable="false" />
+          <Property Name="Nombre" Type="varchar" MaxLength="100" Nullable="false" />
         </EntityType>
         <EntityType Name="TipoReclamo">
           <Key>
@@ -127,6 +233,18 @@
           <Property Name="idTipoTarifa" Type="int" StoreGeneratedPattern="Identity" Nullable="false" />
           <Property Name="NombreTipo" Type="varchar" MaxLength="50" Nullable="false" />
           <Property Name="Activo" Type="bit" />
+        </EntityType>
+        <EntityType Name="Turno">
+          <Key>
+            <PropertyRef Name="idTurno" />
+          </Key>
+          <Property Name="idTurno" Type="int" StoreGeneratedPattern="Identity" Nullable="false" />
+          <Property Name="idSocio" Type="int" Nullable="false" />
+          <Property Name="idEstadoTurno" Type="int" Nullable="false" />
+          <Property Name="Fecha" Type="date" Nullable="false" />
+          <Property Name="Hora" Type="time" Precision="7" Nullable="false" />
+          <Property Name="Motivo" Type="varchar" MaxLength="255" />
+          <Property Name="Observaciones" Type="varchar" MaxLength="255" />
         </EntityType>
         <EntityType Name="UsuarioSistema">
           <Key>
@@ -283,6 +401,222 @@
             </Dependent>
           </ReferentialConstraint>
         </Association>
+        <Association Name="FK_DocumentoSolicitud_Requisito">
+          <End Role="RequisitoServicio" Type="Self.RequisitoServicio" Multiplicity="0..1" />
+          <End Role="DocumentoSolicitud" Type="Self.DocumentoSolicitud" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="RequisitoServicio">
+              <PropertyRef Name="idRequisitoServicio" />
+            </Principal>
+            <Dependent Role="DocumentoSolicitud">
+              <PropertyRef Name="idRequisitoServicio" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_DocumentoSolicitud_Solicitud">
+          <End Role="SolicitudServicio" Type="Self.SolicitudServicio" Multiplicity="1" />
+          <End Role="DocumentoSolicitud" Type="Self.DocumentoSolicitud" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="SolicitudServicio">
+              <PropertyRef Name="idSolicitudServicio" />
+            </Principal>
+            <Dependent Role="DocumentoSolicitud">
+              <PropertyRef Name="idSolicitudServicio" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_HistorialSolicitud_Empleado">
+          <End Role="Empleado" Type="Self.Empleado" Multiplicity="0..1" />
+          <End Role="HistorialEstadoSolicitud" Type="Self.HistorialEstadoSolicitud" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="Empleado">
+              <PropertyRef Name="idEmpleado" />
+            </Principal>
+            <Dependent Role="HistorialEstadoSolicitud">
+              <PropertyRef Name="idEmpleado" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_HistorialSolicitud_Estado">
+          <End Role="EstadoSolicitudServicio" Type="Self.EstadoSolicitudServicio" Multiplicity="1" />
+          <End Role="HistorialEstadoSolicitud" Type="Self.HistorialEstadoSolicitud" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="EstadoSolicitudServicio">
+              <PropertyRef Name="idEstadoSolicitud" />
+            </Principal>
+            <Dependent Role="HistorialEstadoSolicitud">
+              <PropertyRef Name="idEstadoSolicitud" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_HistorialSolicitud_Solicitud">
+          <End Role="SolicitudServicio" Type="Self.SolicitudServicio" Multiplicity="1" />
+          <End Role="HistorialEstadoSolicitud" Type="Self.HistorialEstadoSolicitud" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="SolicitudServicio">
+              <PropertyRef Name="idSolicitudServicio" />
+            </Principal>
+            <Dependent Role="HistorialEstadoSolicitud">
+              <PropertyRef Name="idSolicitudServicio" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_Medicion_Empleado">
+          <End Role="Empleado" Type="Self.Empleado" Multiplicity="1" />
+          <End Role="Medicion" Type="Self.Medicion" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="Empleado">
+              <PropertyRef Name="idEmpleado" />
+            </Principal>
+            <Dependent Role="Medicion">
+              <PropertyRef Name="idEmpleado" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_Medicion_Medidor">
+          <End Role="Medidor" Type="Self.Medidor" Multiplicity="1" />
+          <End Role="Medicion" Type="Self.Medicion" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="Medidor">
+              <PropertyRef Name="idMedidor" />
+            </Principal>
+            <Dependent Role="Medicion">
+              <PropertyRef Name="idMedidor" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_Medicion_ServicioSocio">
+          <End Role="ServicioSocio" Type="Self.ServicioSocio" Multiplicity="1" />
+          <End Role="Medicion" Type="Self.Medicion" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="ServicioSocio">
+              <PropertyRef Name="idServicioSocio" />
+            </Principal>
+            <Dependent Role="Medicion">
+              <PropertyRef Name="idServicioSocio" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_Medicion_TipoLectura">
+          <End Role="TipoLectura" Type="Self.TipoLectura" Multiplicity="1" />
+          <End Role="Medicion" Type="Self.Medicion" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="TipoLectura">
+              <PropertyRef Name="idTipoLectura" />
+            </Principal>
+            <Dependent Role="Medicion">
+              <PropertyRef Name="idTipoLectura" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_Medidor_ServicioSocio">
+          <End Role="ServicioSocio" Type="Self.ServicioSocio" Multiplicity="1" />
+          <End Role="Medidor" Type="Self.Medidor" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="ServicioSocio">
+              <PropertyRef Name="idServicioSocio" />
+            </Principal>
+            <Dependent Role="Medidor">
+              <PropertyRef Name="idServicioSocio" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_Medidor_TipoMedidor">
+          <End Role="TipoMedidor" Type="Self.TipoMedidor" Multiplicity="1" />
+          <End Role="Medidor" Type="Self.Medidor" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="TipoMedidor">
+              <PropertyRef Name="idTipoMedidor" />
+            </Principal>
+            <Dependent Role="Medidor">
+              <PropertyRef Name="idTipoMedidor" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_RequisitoServicio_Servicio">
+          <End Role="Servicio" Type="Self.Servicio" Multiplicity="1" />
+          <End Role="RequisitoServicio" Type="Self.RequisitoServicio" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="Servicio">
+              <PropertyRef Name="idServicio" />
+            </Principal>
+            <Dependent Role="RequisitoServicio">
+              <PropertyRef Name="idServicio" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_SolicitudServicio_Empleado">
+          <End Role="Empleado" Type="Self.Empleado" Multiplicity="0..1" />
+          <End Role="SolicitudServicio" Type="Self.SolicitudServicio" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="Empleado">
+              <PropertyRef Name="idEmpleado" />
+            </Principal>
+            <Dependent Role="SolicitudServicio">
+              <PropertyRef Name="idEmpleadoRevisor" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_SolicitudServicio_Estado">
+          <End Role="EstadoSolicitudServicio" Type="Self.EstadoSolicitudServicio" Multiplicity="1" />
+          <End Role="SolicitudServicio" Type="Self.SolicitudServicio" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="EstadoSolicitudServicio">
+              <PropertyRef Name="idEstadoSolicitud" />
+            </Principal>
+            <Dependent Role="SolicitudServicio">
+              <PropertyRef Name="idEstadoSolicitud" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_SolicitudServicio_Servicio">
+          <End Role="Servicio" Type="Self.Servicio" Multiplicity="1" />
+          <End Role="SolicitudServicio" Type="Self.SolicitudServicio" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="Servicio">
+              <PropertyRef Name="idServicio" />
+            </Principal>
+            <Dependent Role="SolicitudServicio">
+              <PropertyRef Name="idServicio" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_SolicitudServicio_Socio">
+          <End Role="Socio" Type="Self.Socio" Multiplicity="1" />
+          <End Role="SolicitudServicio" Type="Self.SolicitudServicio" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="Socio">
+              <PropertyRef Name="idSocio" />
+            </Principal>
+            <Dependent Role="SolicitudServicio">
+              <PropertyRef Name="idSocio" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_Turno_Estado">
+          <End Role="EstadoTurno" Type="Self.EstadoTurno" Multiplicity="1" />
+          <End Role="Turno" Type="Self.Turno" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="EstadoTurno">
+              <PropertyRef Name="idEstadoTurno" />
+            </Principal>
+            <Dependent Role="Turno">
+              <PropertyRef Name="idEstadoTurno" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_Turno_Socio">
+          <End Role="Socio" Type="Self.Socio" Multiplicity="1" />
+          <End Role="Turno" Type="Self.Turno" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="Socio">
+              <PropertyRef Name="idSocio" />
+            </Principal>
+            <Dependent Role="Turno">
+              <PropertyRef Name="idSocio" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
         <Association Name="FK_UsuarioSistema_Socio">
           <End Role="Socio" Type="Self.Socio" Multiplicity="1" />
           <End Role="UsuarioSistema" Type="Self.UsuarioSistema" Multiplicity="*" />
@@ -343,17 +677,28 @@
         <EntityContainer Name="CooperativaModelStoreContainer">
           <EntitySet Name="__MigrationHistory" EntityType="Self.__MigrationHistory" Schema="dbo" store:Type="Tables" />
           <EntitySet Name="Cargo" EntityType="Self.Cargo" Schema="dbo" store:Type="Tables" />
+          <EntitySet Name="DocumentoSolicitud" EntityType="Self.DocumentoSolicitud" Schema="dbo" store:Type="Tables" />
           <EntitySet Name="Empleado" EntityType="Self.Empleado" Schema="dbo" store:Type="Tables" />
           <EntitySet Name="EstadoReclamo" EntityType="Self.EstadoReclamo" Schema="dbo" store:Type="Tables" />
+          <EntitySet Name="EstadoSolicitudServicio" EntityType="Self.EstadoSolicitudServicio" Schema="dbo" store:Type="Tables" />
+          <EntitySet Name="EstadoTurno" EntityType="Self.EstadoTurno" Schema="dbo" store:Type="Tables" />
+          <EntitySet Name="HistorialEstadoSolicitud" EntityType="Self.HistorialEstadoSolicitud" Schema="dbo" store:Type="Tables" />
+          <EntitySet Name="Medicion" EntityType="Self.Medicion" Schema="dbo" store:Type="Tables" />
+          <EntitySet Name="Medidor" EntityType="Self.Medidor" Schema="dbo" store:Type="Tables" />
           <EntitySet Name="Persona" EntityType="Self.Persona" Schema="dbo" store:Type="Tables" />
           <EntitySet Name="Reclamo" EntityType="Self.Reclamo" Schema="dbo" store:Type="Tables" />
+          <EntitySet Name="RequisitoServicio" EntityType="Self.RequisitoServicio" Schema="dbo" store:Type="Tables" />
           <EntitySet Name="Rol" EntityType="Self.Rol" Schema="dbo" store:Type="Tables" />
           <EntitySet Name="Servicio" EntityType="Self.Servicio" Schema="dbo" store:Type="Tables" />
           <EntitySet Name="ServicioSocio" EntityType="Self.ServicioSocio" Schema="dbo" store:Type="Tables" />
           <EntitySet Name="Socio" EntityType="Self.Socio" Schema="dbo" store:Type="Tables" />
+          <EntitySet Name="SolicitudServicio" EntityType="Self.SolicitudServicio" Schema="dbo" store:Type="Tables" />
           <EntitySet Name="sysdiagrams" EntityType="Self.sysdiagrams" Schema="dbo" store:Type="Tables" />
+          <EntitySet Name="TipoLectura" EntityType="Self.TipoLectura" Schema="dbo" store:Type="Tables" />
+          <EntitySet Name="TipoMedidor" EntityType="Self.TipoMedidor" Schema="dbo" store:Type="Tables" />
           <EntitySet Name="TipoReclamo" EntityType="Self.TipoReclamo" Schema="dbo" store:Type="Tables" />
           <EntitySet Name="TipoTarifa" EntityType="Self.TipoTarifa" Schema="dbo" store:Type="Tables" />
+          <EntitySet Name="Turno" EntityType="Self.Turno" Schema="dbo" store:Type="Tables" />
           <EntitySet Name="UsuarioSistema" EntityType="Self.UsuarioSistema" Schema="dbo" store:Type="Tables" />
           <AssociationSet Name="FK__Empleado__idCarg__403A8C7D" Association="Self.FK__Empleado__idCarg__403A8C7D">
             <End Role="Cargo" EntitySet="Cargo" />
@@ -403,6 +748,78 @@
             <End Role="Socio" EntitySet="Socio" />
             <End Role="UsuarioSistema" EntitySet="UsuarioSistema" />
           </AssociationSet>
+          <AssociationSet Name="FK_DocumentoSolicitud_Requisito" Association="Self.FK_DocumentoSolicitud_Requisito">
+            <End Role="RequisitoServicio" EntitySet="RequisitoServicio" />
+            <End Role="DocumentoSolicitud" EntitySet="DocumentoSolicitud" />
+          </AssociationSet>
+          <AssociationSet Name="FK_DocumentoSolicitud_Solicitud" Association="Self.FK_DocumentoSolicitud_Solicitud">
+            <End Role="SolicitudServicio" EntitySet="SolicitudServicio" />
+            <End Role="DocumentoSolicitud" EntitySet="DocumentoSolicitud" />
+          </AssociationSet>
+          <AssociationSet Name="FK_HistorialSolicitud_Empleado" Association="Self.FK_HistorialSolicitud_Empleado">
+            <End Role="Empleado" EntitySet="Empleado" />
+            <End Role="HistorialEstadoSolicitud" EntitySet="HistorialEstadoSolicitud" />
+          </AssociationSet>
+          <AssociationSet Name="FK_HistorialSolicitud_Estado" Association="Self.FK_HistorialSolicitud_Estado">
+            <End Role="EstadoSolicitudServicio" EntitySet="EstadoSolicitudServicio" />
+            <End Role="HistorialEstadoSolicitud" EntitySet="HistorialEstadoSolicitud" />
+          </AssociationSet>
+          <AssociationSet Name="FK_HistorialSolicitud_Solicitud" Association="Self.FK_HistorialSolicitud_Solicitud">
+            <End Role="SolicitudServicio" EntitySet="SolicitudServicio" />
+            <End Role="HistorialEstadoSolicitud" EntitySet="HistorialEstadoSolicitud" />
+          </AssociationSet>
+          <AssociationSet Name="FK_Medicion_Empleado" Association="Self.FK_Medicion_Empleado">
+            <End Role="Empleado" EntitySet="Empleado" />
+            <End Role="Medicion" EntitySet="Medicion" />
+          </AssociationSet>
+          <AssociationSet Name="FK_Medicion_Medidor" Association="Self.FK_Medicion_Medidor">
+            <End Role="Medidor" EntitySet="Medidor" />
+            <End Role="Medicion" EntitySet="Medicion" />
+          </AssociationSet>
+          <AssociationSet Name="FK_Medicion_ServicioSocio" Association="Self.FK_Medicion_ServicioSocio">
+            <End Role="ServicioSocio" EntitySet="ServicioSocio" />
+            <End Role="Medicion" EntitySet="Medicion" />
+          </AssociationSet>
+          <AssociationSet Name="FK_Medicion_TipoLectura" Association="Self.FK_Medicion_TipoLectura">
+            <End Role="TipoLectura" EntitySet="TipoLectura" />
+            <End Role="Medicion" EntitySet="Medicion" />
+          </AssociationSet>
+          <AssociationSet Name="FK_Medidor_ServicioSocio" Association="Self.FK_Medidor_ServicioSocio">
+            <End Role="ServicioSocio" EntitySet="ServicioSocio" />
+            <End Role="Medidor" EntitySet="Medidor" />
+          </AssociationSet>
+          <AssociationSet Name="FK_Medidor_TipoMedidor" Association="Self.FK_Medidor_TipoMedidor">
+            <End Role="TipoMedidor" EntitySet="TipoMedidor" />
+            <End Role="Medidor" EntitySet="Medidor" />
+          </AssociationSet>
+          <AssociationSet Name="FK_RequisitoServicio_Servicio" Association="Self.FK_RequisitoServicio_Servicio">
+            <End Role="Servicio" EntitySet="Servicio" />
+            <End Role="RequisitoServicio" EntitySet="RequisitoServicio" />
+          </AssociationSet>
+          <AssociationSet Name="FK_SolicitudServicio_Empleado" Association="Self.FK_SolicitudServicio_Empleado">
+            <End Role="Empleado" EntitySet="Empleado" />
+            <End Role="SolicitudServicio" EntitySet="SolicitudServicio" />
+          </AssociationSet>
+          <AssociationSet Name="FK_SolicitudServicio_Estado" Association="Self.FK_SolicitudServicio_Estado">
+            <End Role="EstadoSolicitudServicio" EntitySet="EstadoSolicitudServicio" />
+            <End Role="SolicitudServicio" EntitySet="SolicitudServicio" />
+          </AssociationSet>
+          <AssociationSet Name="FK_SolicitudServicio_Servicio" Association="Self.FK_SolicitudServicio_Servicio">
+            <End Role="Servicio" EntitySet="Servicio" />
+            <End Role="SolicitudServicio" EntitySet="SolicitudServicio" />
+          </AssociationSet>
+          <AssociationSet Name="FK_SolicitudServicio_Socio" Association="Self.FK_SolicitudServicio_Socio">
+            <End Role="Socio" EntitySet="Socio" />
+            <End Role="SolicitudServicio" EntitySet="SolicitudServicio" />
+          </AssociationSet>
+          <AssociationSet Name="FK_Turno_Estado" Association="Self.FK_Turno_Estado">
+            <End Role="EstadoTurno" EntitySet="EstadoTurno" />
+            <End Role="Turno" EntitySet="Turno" />
+          </AssociationSet>
+          <AssociationSet Name="FK_Turno_Socio" Association="Self.FK_Turno_Socio">
+            <End Role="Socio" EntitySet="Socio" />
+            <End Role="Turno" EntitySet="Turno" />
+          </AssociationSet>
           <AssociationSet Name="FK_UsuarioSistema_Socio" Association="Self.FK_UsuarioSistema_Socio">
             <End Role="Socio" EntitySet="Socio" />
             <End Role="UsuarioSistema" EntitySet="UsuarioSistema" />
@@ -446,6 +863,9 @@
           <NavigationProperty Name="Cargo" Relationship="Self.FK__Empleado__idCarg__403A8C7D" FromRole="Empleado" ToRole="Cargo" />
           <NavigationProperty Name="Persona" Relationship="Self.FK__Empleado__idPers__3F466844" FromRole="Empleado" ToRole="Persona" />
           <NavigationProperty Name="UsuarioSistema" Relationship="Self.FK__UsuarioSi__idEmp__5CD6CB2B" FromRole="Empleado" ToRole="UsuarioSistema" />
+          <NavigationProperty Name="Medicion" Relationship="CooperativaModel.FK_Medicion_Empleado" FromRole="Empleado" ToRole="Medicion" />
+          <NavigationProperty Name="HistorialEstadoSolicitud" Relationship="CooperativaModel.FK_HistorialSolicitud_Empleado" FromRole="Empleado" ToRole="HistorialEstadoSolicitud" />
+          <NavigationProperty Name="SolicitudServicio" Relationship="CooperativaModel.FK_SolicitudServicio_Empleado" FromRole="Empleado" ToRole="SolicitudServicio" />
         </EntityType>
         <EntityType Name="EstadoReclamo">
           <Key>
@@ -505,6 +925,8 @@
           <Property Name="TarifaBase" Type="Decimal" Precision="10" Scale="2" Nullable="false" />
           <NavigationProperty Name="TipoTarifa" Relationship="Self.FK__Servicio__idTipo__49C3F6B7" FromRole="Servicio" ToRole="TipoTarifa" />
           <NavigationProperty Name="ServicioSocio" Relationship="Self.FK__ServicioS__idSer__4E88ABD4" FromRole="Servicio" ToRole="ServicioSocio" />
+          <NavigationProperty Name="RequisitoServicio" Relationship="CooperativaModel.FK_RequisitoServicio_Servicio" FromRole="Servicio" ToRole="RequisitoServicio" />
+          <NavigationProperty Name="SolicitudServicio" Relationship="CooperativaModel.FK_SolicitudServicio_Servicio" FromRole="Servicio" ToRole="SolicitudServicio" />
         </EntityType>
         <EntityType Name="ServicioSocio">
           <Key>
@@ -519,6 +941,8 @@
           <Property Name="TarifaAplicada" Type="Decimal" Precision="10" Scale="2" />
           <NavigationProperty Name="Servicio" Relationship="Self.FK__ServicioS__idSer__4E88ABD4" FromRole="ServicioSocio" ToRole="Servicio" />
           <NavigationProperty Name="Socio" Relationship="Self.FK__ServicioS__idSoc__4D94879B" FromRole="ServicioSocio" ToRole="Socio" />
+          <NavigationProperty Name="Medicion" Relationship="CooperativaModel.FK_Medicion_ServicioSocio" FromRole="ServicioSocio" ToRole="Medicion" />
+          <NavigationProperty Name="Medidor" Relationship="CooperativaModel.FK_Medidor_ServicioSocio" FromRole="ServicioSocio" ToRole="Medidor" />
         </EntityType>
         <EntityType Name="Socio">
           <Key>
@@ -532,6 +956,8 @@
           <NavigationProperty Name="Reclamo" Relationship="Self.FK__Reclamo__idSocio__5535A963" FromRole="Socio" ToRole="Reclamo" />
           <NavigationProperty Name="ServicioSocio" Relationship="Self.FK__ServicioS__idSoc__4D94879B" FromRole="Socio" ToRole="ServicioSocio" />
           <NavigationProperty Name="UsuarioSistema2" Relationship="CooperativaModel.FK_UsuarioSistema_Socios" FromRole="Socio" ToRole="UsuarioSistema" />
+          <NavigationProperty Name="Turno" Relationship="CooperativaModel.FK_Turno_Socio" FromRole="Socio" ToRole="Turno" />
+          <NavigationProperty Name="SolicitudServicio" Relationship="CooperativaModel.FK_SolicitudServicio_Socio" FromRole="Socio" ToRole="SolicitudServicio" />
         </EntityType>
         <EntityType Name="TipoReclamo">
           <Key>
@@ -789,6 +1215,89 @@
             <End Role="Socio" EntitySet="Socio" />
             <End Role="UsuarioSistema" EntitySet="UsuarioSistema" />
           </AssociationSet>
+          <EntitySet Name="EstadoTurno" EntityType="CooperativaModel.EstadoTurno" />
+          <EntitySet Name="Medicion" EntityType="CooperativaModel.Medicion" />
+          <EntitySet Name="TipoLectura" EntityType="CooperativaModel.TipoLectura" />
+          <EntitySet Name="Turno" EntityType="CooperativaModel.Turno" />
+          <AssociationSet Name="FK_Medicion_Empleado" Association="CooperativaModel.FK_Medicion_Empleado">
+            <End Role="Empleado" EntitySet="Empleado" />
+            <End Role="Medicion" EntitySet="Medicion" />
+          </AssociationSet>
+          <AssociationSet Name="FK_Turno_Estado" Association="CooperativaModel.FK_Turno_Estado">
+            <End Role="EstadoTurno" EntitySet="EstadoTurno" />
+            <End Role="Turno" EntitySet="Turno" />
+          </AssociationSet>
+          <AssociationSet Name="FK_Medicion_ServicioSocio" Association="CooperativaModel.FK_Medicion_ServicioSocio">
+            <End Role="ServicioSocio" EntitySet="ServicioSocio" />
+            <End Role="Medicion" EntitySet="Medicion" />
+          </AssociationSet>
+          <AssociationSet Name="FK_Medicion_TipoLectura" Association="CooperativaModel.FK_Medicion_TipoLectura">
+            <End Role="TipoLectura" EntitySet="TipoLectura" />
+            <End Role="Medicion" EntitySet="Medicion" />
+          </AssociationSet>
+          <AssociationSet Name="FK_Turno_Socio" Association="CooperativaModel.FK_Turno_Socio">
+            <End Role="Socio" EntitySet="Socio" />
+            <End Role="Turno" EntitySet="Turno" />
+          </AssociationSet>
+          <EntitySet Name="TipoMedidor" EntityType="CooperativaModel.TipoMedidor" />
+          <EntitySet Name="Medidor" EntityType="CooperativaModel.Medidor" />
+          <AssociationSet Name="FK_Medicion_Medidor" Association="CooperativaModel.FK_Medicion_Medidor">
+            <End Role="Medidor" EntitySet="Medidor" />
+            <End Role="Medicion" EntitySet="Medicion" />
+          </AssociationSet>
+          <AssociationSet Name="FK_Medidor_ServicioSocio" Association="CooperativaModel.FK_Medidor_ServicioSocio">
+            <End Role="ServicioSocio" EntitySet="ServicioSocio" />
+            <End Role="Medidor" EntitySet="Medidor" />
+          </AssociationSet>
+          <AssociationSet Name="FK_Medidor_TipoMedidor" Association="CooperativaModel.FK_Medidor_TipoMedidor">
+            <End Role="TipoMedidor" EntitySet="TipoMedidor" />
+            <End Role="Medidor" EntitySet="Medidor" />
+          </AssociationSet>
+          <EntitySet Name="DocumentoSolicitud" EntityType="CooperativaModel.DocumentoSolicitud" />
+          <EntitySet Name="EstadoSolicitudServicio" EntityType="CooperativaModel.EstadoSolicitudServicio" />
+          <EntitySet Name="HistorialEstadoSolicitud" EntityType="CooperativaModel.HistorialEstadoSolicitud" />
+          <EntitySet Name="RequisitoServicio" EntityType="CooperativaModel.RequisitoServicio" />
+          <EntitySet Name="SolicitudServicio" EntityType="CooperativaModel.SolicitudServicio" />
+          <AssociationSet Name="FK_DocumentoSolicitud_Requisito" Association="CooperativaModel.FK_DocumentoSolicitud_Requisito">
+            <End Role="RequisitoServicio" EntitySet="RequisitoServicio" />
+            <End Role="DocumentoSolicitud" EntitySet="DocumentoSolicitud" />
+          </AssociationSet>
+          <AssociationSet Name="FK_DocumentoSolicitud_Solicitud" Association="CooperativaModel.FK_DocumentoSolicitud_Solicitud">
+            <End Role="SolicitudServicio" EntitySet="SolicitudServicio" />
+            <End Role="DocumentoSolicitud" EntitySet="DocumentoSolicitud" />
+          </AssociationSet>
+          <AssociationSet Name="FK_HistorialSolicitud_Empleado" Association="CooperativaModel.FK_HistorialSolicitud_Empleado">
+            <End Role="Empleado" EntitySet="Empleado" />
+            <End Role="HistorialEstadoSolicitud" EntitySet="HistorialEstadoSolicitud" />
+          </AssociationSet>
+          <AssociationSet Name="FK_SolicitudServicio_Empleado" Association="CooperativaModel.FK_SolicitudServicio_Empleado">
+            <End Role="Empleado" EntitySet="Empleado" />
+            <End Role="SolicitudServicio" EntitySet="SolicitudServicio" />
+          </AssociationSet>
+          <AssociationSet Name="FK_HistorialSolicitud_Estado" Association="CooperativaModel.FK_HistorialSolicitud_Estado">
+            <End Role="EstadoSolicitudServicio" EntitySet="EstadoSolicitudServicio" />
+            <End Role="HistorialEstadoSolicitud" EntitySet="HistorialEstadoSolicitud" />
+          </AssociationSet>
+          <AssociationSet Name="FK_SolicitudServicio_Estado" Association="CooperativaModel.FK_SolicitudServicio_Estado">
+            <End Role="EstadoSolicitudServicio" EntitySet="EstadoSolicitudServicio" />
+            <End Role="SolicitudServicio" EntitySet="SolicitudServicio" />
+          </AssociationSet>
+          <AssociationSet Name="FK_HistorialSolicitud_Solicitud" Association="CooperativaModel.FK_HistorialSolicitud_Solicitud">
+            <End Role="SolicitudServicio" EntitySet="SolicitudServicio" />
+            <End Role="HistorialEstadoSolicitud" EntitySet="HistorialEstadoSolicitud" />
+          </AssociationSet>
+          <AssociationSet Name="FK_RequisitoServicio_Servicio" Association="CooperativaModel.FK_RequisitoServicio_Servicio">
+            <End Role="Servicio" EntitySet="Servicio" />
+            <End Role="RequisitoServicio" EntitySet="RequisitoServicio" />
+          </AssociationSet>
+          <AssociationSet Name="FK_SolicitudServicio_Servicio" Association="CooperativaModel.FK_SolicitudServicio_Servicio">
+            <End Role="Servicio" EntitySet="Servicio" />
+            <End Role="SolicitudServicio" EntitySet="SolicitudServicio" />
+          </AssociationSet>
+          <AssociationSet Name="FK_SolicitudServicio_Socio" Association="CooperativaModel.FK_SolicitudServicio_Socio">
+            <End Role="Socio" EntitySet="Socio" />
+            <End Role="SolicitudServicio" EntitySet="SolicitudServicio" />
+          </AssociationSet>
         </EntityContainer>
         <EntityType Name="sysdiagrams">
           <Key>
@@ -821,6 +1330,367 @@
               <PropertyRef Name="idSocio" />
             </Principal>
             <Dependent Role="UsuarioSistema">
+              <PropertyRef Name="idSocio" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <EntityType Name="EstadoTurno">
+          <Key>
+            <PropertyRef Name="idEstadoTurno" />
+          </Key>
+          <Property Name="idEstadoTurno" Type="Int32" Nullable="false" annotation:StoreGeneratedPattern="Identity" />
+          <Property Name="NombreEstado" Type="String" Nullable="false" MaxLength="50" FixedLength="false" Unicode="false" />
+          <NavigationProperty Name="Turno" Relationship="CooperativaModel.FK_Turno_Estado" FromRole="EstadoTurno" ToRole="Turno" />
+        </EntityType>
+        <EntityType Name="Medicion">
+          <Key>
+            <PropertyRef Name="idMedicion" />
+          </Key>
+          <Property Name="idMedicion" Type="Int32" Nullable="false" annotation:StoreGeneratedPattern="Identity" />
+          <Property Name="idServicioSocio" Type="Int32" Nullable="false" />
+          <Property Name="idEmpleado" Type="Int32" Nullable="false" />
+          <Property Name="idMedidor" Type="Int32" Nullable="false" />
+          <Property Name="idTipoLectura" Type="Int32" Nullable="false" />
+          <Property Name="FechaLectura" Type="DateTime" Nullable="false" Precision="0" />
+          <Property Name="FechaCarga" Type="DateTime" Precision="3" />
+          <Property Name="ValorLectura" Type="Decimal" Nullable="false" Precision="10" Scale="2" />
+          <Property Name="ConsumoCalculado" Type="Decimal" Precision="10" Scale="2" />
+          <Property Name="Periodo" Type="String" MaxLength="10" FixedLength="false" Unicode="false" />
+          <Property Name="FotoURL" Type="String" MaxLength="255" FixedLength="false" Unicode="false" />
+          <Property Name="Observaciones" Type="String" MaxLength="255" FixedLength="false" Unicode="false" />
+          <NavigationProperty Name="Empleado" Relationship="CooperativaModel.FK_Medicion_Empleado" FromRole="Medicion" ToRole="Empleado" />
+          <NavigationProperty Name="ServicioSocio" Relationship="CooperativaModel.FK_Medicion_ServicioSocio" FromRole="Medicion" ToRole="ServicioSocio" />
+          <NavigationProperty Name="TipoLectura" Relationship="CooperativaModel.FK_Medicion_TipoLectura" FromRole="Medicion" ToRole="TipoLectura" />
+          <NavigationProperty Name="Medidor" Relationship="CooperativaModel.FK_Medicion_Medidor" FromRole="Medicion" ToRole="Medidor" />
+        </EntityType>
+        <EntityType Name="TipoLectura">
+          <Key>
+            <PropertyRef Name="idTipoLectura" />
+          </Key>
+          <Property Name="idTipoLectura" Type="Int32" Nullable="false" annotation:StoreGeneratedPattern="Identity" />
+          <Property Name="Nombre" Type="String" Nullable="false" MaxLength="50" FixedLength="false" Unicode="false" />
+          <NavigationProperty Name="Medicion" Relationship="CooperativaModel.FK_Medicion_TipoLectura" FromRole="TipoLectura" ToRole="Medicion" />
+        </EntityType>
+        <EntityType Name="Turno">
+          <Key>
+            <PropertyRef Name="idTurno" />
+          </Key>
+          <Property Name="idTurno" Type="Int32" Nullable="false" annotation:StoreGeneratedPattern="Identity" />
+          <Property Name="idSocio" Type="Int32" Nullable="false" />
+          <Property Name="idEstadoTurno" Type="Int32" Nullable="false" />
+          <Property Name="Fecha" Type="DateTime" Nullable="false" Precision="0" />
+          <Property Name="Hora" Type="Time" Nullable="false" Precision="7" />
+          <Property Name="Motivo" Type="String" MaxLength="255" FixedLength="false" Unicode="false" />
+          <Property Name="Observaciones" Type="String" MaxLength="255" FixedLength="false" Unicode="false" />
+          <NavigationProperty Name="EstadoTurno" Relationship="CooperativaModel.FK_Turno_Estado" FromRole="Turno" ToRole="EstadoTurno" />
+          <NavigationProperty Name="Socio" Relationship="CooperativaModel.FK_Turno_Socio" FromRole="Turno" ToRole="Socio" />
+        </EntityType>
+        <Association Name="FK_Medicion_Empleado">
+          <End Type="CooperativaModel.Empleado" Role="Empleado" Multiplicity="1" />
+          <End Type="CooperativaModel.Medicion" Role="Medicion" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="Empleado">
+              <PropertyRef Name="idEmpleado" />
+            </Principal>
+            <Dependent Role="Medicion">
+              <PropertyRef Name="idEmpleado" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_Turno_Estado">
+          <End Type="CooperativaModel.EstadoTurno" Role="EstadoTurno" Multiplicity="1" />
+          <End Type="CooperativaModel.Turno" Role="Turno" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="EstadoTurno">
+              <PropertyRef Name="idEstadoTurno" />
+            </Principal>
+            <Dependent Role="Turno">
+              <PropertyRef Name="idEstadoTurno" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_Medicion_ServicioSocio">
+          <End Type="CooperativaModel.ServicioSocio" Role="ServicioSocio" Multiplicity="1" />
+          <End Type="CooperativaModel.Medicion" Role="Medicion" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="ServicioSocio">
+              <PropertyRef Name="idServicioSocio" />
+            </Principal>
+            <Dependent Role="Medicion">
+              <PropertyRef Name="idServicioSocio" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_Medicion_TipoLectura">
+          <End Type="CooperativaModel.TipoLectura" Role="TipoLectura" Multiplicity="1" />
+          <End Type="CooperativaModel.Medicion" Role="Medicion" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="TipoLectura">
+              <PropertyRef Name="idTipoLectura" />
+            </Principal>
+            <Dependent Role="Medicion">
+              <PropertyRef Name="idTipoLectura" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_Turno_Socio">
+          <End Type="CooperativaModel.Socio" Role="Socio" Multiplicity="1" />
+          <End Type="CooperativaModel.Turno" Role="Turno" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="Socio">
+              <PropertyRef Name="idSocio" />
+            </Principal>
+            <Dependent Role="Turno">
+              <PropertyRef Name="idSocio" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <EntityType Name="TipoMedidor">
+          <Key>
+            <PropertyRef Name="idTipoMedidor" />
+          </Key>
+          <Property Name="idTipoMedidor" Type="Int32" Nullable="false" annotation:StoreGeneratedPattern="Identity" />
+          <Property Name="Nombre" Type="String" Nullable="false" MaxLength="100" FixedLength="false" Unicode="false" />
+          <NavigationProperty Name="Medidor" Relationship="CooperativaModel.FK_Medidor_TipoMedidor" FromRole="TipoMedidor" ToRole="Medidor" />
+        </EntityType>
+        <EntityType Name="Medidor">
+          <Key>
+            <PropertyRef Name="idMedidor" />
+          </Key>
+          <Property Name="idMedidor" Type="Int32" Nullable="false" annotation:StoreGeneratedPattern="Identity" />
+          <Property Name="Numero" Type="String" Nullable="false" MaxLength="50" FixedLength="false" Unicode="false" />
+          <Property Name="idServicioSocio" Type="Int32" Nullable="false" />
+          <Property Name="Activo" Type="Boolean" Nullable="false" />
+          <Property Name="idTipoMedidor" Type="Int32" Nullable="false" />
+          <Property Name="FechaInstalacion" Type="DateTime" Precision="3" />
+          <NavigationProperty Name="Medicion" Relationship="CooperativaModel.FK_Medicion_Medidor" FromRole="Medidor" ToRole="Medicion" />
+          <NavigationProperty Name="ServicioSocio" Relationship="CooperativaModel.FK_Medidor_ServicioSocio" FromRole="Medidor" ToRole="ServicioSocio" />
+          <NavigationProperty Name="TipoMedidor" Relationship="CooperativaModel.FK_Medidor_TipoMedidor" FromRole="Medidor" ToRole="TipoMedidor" />
+        </EntityType>
+        <Association Name="FK_Medicion_Medidor">
+          <End Type="CooperativaModel.Medidor" Role="Medidor" Multiplicity="1" />
+          <End Type="CooperativaModel.Medicion" Role="Medicion" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="Medidor">
+              <PropertyRef Name="idMedidor" />
+            </Principal>
+            <Dependent Role="Medicion">
+              <PropertyRef Name="idMedidor" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_Medidor_ServicioSocio">
+          <End Type="CooperativaModel.ServicioSocio" Role="ServicioSocio" Multiplicity="1" />
+          <End Type="CooperativaModel.Medidor" Role="Medidor" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="ServicioSocio">
+              <PropertyRef Name="idServicioSocio" />
+            </Principal>
+            <Dependent Role="Medidor">
+              <PropertyRef Name="idServicioSocio" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_Medidor_TipoMedidor">
+          <End Type="CooperativaModel.TipoMedidor" Role="TipoMedidor" Multiplicity="1" />
+          <End Type="CooperativaModel.Medidor" Role="Medidor" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="TipoMedidor">
+              <PropertyRef Name="idTipoMedidor" />
+            </Principal>
+            <Dependent Role="Medidor">
+              <PropertyRef Name="idTipoMedidor" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <EntityType Name="DocumentoSolicitud">
+          <Key>
+            <PropertyRef Name="idDocumentoSolicitud" />
+          </Key>
+          <Property Name="idDocumentoSolicitud" Type="Int32" Nullable="false" annotation:StoreGeneratedPattern="Identity" />
+          <Property Name="idSolicitudServicio" Type="Int32" Nullable="false" />
+          <Property Name="idRequisitoServicio" Type="Int32" />
+          <Property Name="NombreArchivo" Type="String" Nullable="false" MaxLength="300" FixedLength="false" Unicode="false" />
+          <Property Name="RutaArchivo" Type="String" Nullable="false" MaxLength="1000" FixedLength="false" Unicode="false" />
+          <Property Name="TipoArchivo" Type="String" Nullable="false" MaxLength="50" FixedLength="false" Unicode="false" />
+          <Property Name="FechaSubida" Type="DateTime" Nullable="false" Precision="3" />
+          <Property Name="Observaciones" Type="String" MaxLength="500" FixedLength="false" Unicode="false" />
+          <Property Name="Aprobado" Type="Boolean" />
+          <NavigationProperty Name="RequisitoServicio" Relationship="CooperativaModel.FK_DocumentoSolicitud_Requisito" FromRole="DocumentoSolicitud" ToRole="RequisitoServicio" />
+          <NavigationProperty Name="SolicitudServicio" Relationship="CooperativaModel.FK_DocumentoSolicitud_Solicitud" FromRole="DocumentoSolicitud" ToRole="SolicitudServicio" />
+        </EntityType>
+        <EntityType Name="EstadoSolicitudServicio">
+          <Key>
+            <PropertyRef Name="idEstadoSolicitud" />
+          </Key>
+          <Property Name="idEstadoSolicitud" Type="Int32" Nullable="false" annotation:StoreGeneratedPattern="Identity" />
+          <Property Name="NombreEstado" Type="String" Nullable="false" MaxLength="50" FixedLength="false" Unicode="false" />
+          <NavigationProperty Name="HistorialEstadoSolicitud" Relationship="CooperativaModel.FK_HistorialSolicitud_Estado" FromRole="EstadoSolicitudServicio" ToRole="HistorialEstadoSolicitud" />
+          <NavigationProperty Name="SolicitudServicio" Relationship="CooperativaModel.FK_SolicitudServicio_Estado" FromRole="EstadoSolicitudServicio" ToRole="SolicitudServicio" />
+        </EntityType>
+        <EntityType Name="HistorialEstadoSolicitud">
+          <Key>
+            <PropertyRef Name="idHistorialEstadoSolicitud" />
+          </Key>
+          <Property Name="idHistorialEstadoSolicitud" Type="Int32" Nullable="false" annotation:StoreGeneratedPattern="Identity" />
+          <Property Name="idSolicitudServicio" Type="Int32" Nullable="false" />
+          <Property Name="idEstadoSolicitud" Type="Int32" Nullable="false" />
+          <Property Name="idEmpleado" Type="Int32" />
+          <Property Name="FechaCambio" Type="DateTime" Nullable="false" Precision="3" />
+          <Property Name="Observaciones" Type="String" MaxLength="1000" FixedLength="false" Unicode="false" />
+          <NavigationProperty Name="Empleado" Relationship="CooperativaModel.FK_HistorialSolicitud_Empleado" FromRole="HistorialEstadoSolicitud" ToRole="Empleado" />
+          <NavigationProperty Name="EstadoSolicitudServicio" Relationship="CooperativaModel.FK_HistorialSolicitud_Estado" FromRole="HistorialEstadoSolicitud" ToRole="EstadoSolicitudServicio" />
+          <NavigationProperty Name="SolicitudServicio" Relationship="CooperativaModel.FK_HistorialSolicitud_Solicitud" FromRole="HistorialEstadoSolicitud" ToRole="SolicitudServicio" />
+        </EntityType>
+        <EntityType Name="RequisitoServicio">
+          <Key>
+            <PropertyRef Name="idRequisitoServicio" />
+          </Key>
+          <Property Name="idRequisitoServicio" Type="Int32" Nullable="false" annotation:StoreGeneratedPattern="Identity" />
+          <Property Name="idServicio" Type="Int32" Nullable="false" />
+          <Property Name="Nombre" Type="String" Nullable="false" MaxLength="200" FixedLength="false" Unicode="false" />
+          <Property Name="Descripcion" Type="String" MaxLength="500" FixedLength="false" Unicode="false" />
+          <Property Name="Obligatorio" Type="Boolean" Nullable="false" />
+          <Property Name="Activo" Type="Boolean" Nullable="false" />
+          <NavigationProperty Name="DocumentoSolicitud" Relationship="CooperativaModel.FK_DocumentoSolicitud_Requisito" FromRole="RequisitoServicio" ToRole="DocumentoSolicitud" />
+          <NavigationProperty Name="Servicio" Relationship="CooperativaModel.FK_RequisitoServicio_Servicio" FromRole="RequisitoServicio" ToRole="Servicio" />
+        </EntityType>
+        <EntityType Name="SolicitudServicio">
+          <Key>
+            <PropertyRef Name="idSolicitudServicio" />
+          </Key>
+          <Property Name="idSolicitudServicio" Type="Int32" Nullable="false" annotation:StoreGeneratedPattern="Identity" />
+          <Property Name="idSocio" Type="Int32" Nullable="false" />
+          <Property Name="idServicio" Type="Int32" Nullable="false" />
+          <Property Name="idEstadoSolicitud" Type="Int32" Nullable="false" />
+          <Property Name="FechaSolicitud" Type="DateTime" Nullable="false" Precision="3" />
+          <Property Name="Observaciones" Type="String" MaxLength="1000" FixedLength="false" Unicode="false" />
+          <Property Name="FechaResolucion" Type="DateTime" Precision="3" />
+          <Property Name="idEmpleadoRevisor" Type="Int32" />
+          <Property Name="MotivoRechazo" Type="String" MaxLength="1000" FixedLength="false" Unicode="false" />
+          <NavigationProperty Name="DocumentoSolicitud" Relationship="CooperativaModel.FK_DocumentoSolicitud_Solicitud" FromRole="SolicitudServicio" ToRole="DocumentoSolicitud" />
+          <NavigationProperty Name="Empleado" Relationship="CooperativaModel.FK_SolicitudServicio_Empleado" FromRole="SolicitudServicio" ToRole="Empleado" />
+          <NavigationProperty Name="EstadoSolicitudServicio" Relationship="CooperativaModel.FK_SolicitudServicio_Estado" FromRole="SolicitudServicio" ToRole="EstadoSolicitudServicio" />
+          <NavigationProperty Name="HistorialEstadoSolicitud" Relationship="CooperativaModel.FK_HistorialSolicitud_Solicitud" FromRole="SolicitudServicio" ToRole="HistorialEstadoSolicitud" />
+          <NavigationProperty Name="Servicio" Relationship="CooperativaModel.FK_SolicitudServicio_Servicio" FromRole="SolicitudServicio" ToRole="Servicio" />
+          <NavigationProperty Name="Socio" Relationship="CooperativaModel.FK_SolicitudServicio_Socio" FromRole="SolicitudServicio" ToRole="Socio" />
+        </EntityType>
+        <Association Name="FK_DocumentoSolicitud_Requisito">
+          <End Type="CooperativaModel.RequisitoServicio" Role="RequisitoServicio" Multiplicity="0..1" />
+          <End Type="CooperativaModel.DocumentoSolicitud" Role="DocumentoSolicitud" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="RequisitoServicio">
+              <PropertyRef Name="idRequisitoServicio" />
+            </Principal>
+            <Dependent Role="DocumentoSolicitud">
+              <PropertyRef Name="idRequisitoServicio" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_DocumentoSolicitud_Solicitud">
+          <End Type="CooperativaModel.SolicitudServicio" Role="SolicitudServicio" Multiplicity="1" />
+          <End Type="CooperativaModel.DocumentoSolicitud" Role="DocumentoSolicitud" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="SolicitudServicio">
+              <PropertyRef Name="idSolicitudServicio" />
+            </Principal>
+            <Dependent Role="DocumentoSolicitud">
+              <PropertyRef Name="idSolicitudServicio" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_HistorialSolicitud_Empleado">
+          <End Type="CooperativaModel.Empleado" Role="Empleado" Multiplicity="0..1" />
+          <End Type="CooperativaModel.HistorialEstadoSolicitud" Role="HistorialEstadoSolicitud" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="Empleado">
+              <PropertyRef Name="idEmpleado" />
+            </Principal>
+            <Dependent Role="HistorialEstadoSolicitud">
+              <PropertyRef Name="idEmpleado" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_SolicitudServicio_Empleado">
+          <End Type="CooperativaModel.Empleado" Role="Empleado" Multiplicity="0..1" />
+          <End Type="CooperativaModel.SolicitudServicio" Role="SolicitudServicio" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="Empleado">
+              <PropertyRef Name="idEmpleado" />
+            </Principal>
+            <Dependent Role="SolicitudServicio">
+              <PropertyRef Name="idEmpleadoRevisor" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_HistorialSolicitud_Estado">
+          <End Type="CooperativaModel.EstadoSolicitudServicio" Role="EstadoSolicitudServicio" Multiplicity="1" />
+          <End Type="CooperativaModel.HistorialEstadoSolicitud" Role="HistorialEstadoSolicitud" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="EstadoSolicitudServicio">
+              <PropertyRef Name="idEstadoSolicitud" />
+            </Principal>
+            <Dependent Role="HistorialEstadoSolicitud">
+              <PropertyRef Name="idEstadoSolicitud" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_SolicitudServicio_Estado">
+          <End Type="CooperativaModel.EstadoSolicitudServicio" Role="EstadoSolicitudServicio" Multiplicity="1" />
+          <End Type="CooperativaModel.SolicitudServicio" Role="SolicitudServicio" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="EstadoSolicitudServicio">
+              <PropertyRef Name="idEstadoSolicitud" />
+            </Principal>
+            <Dependent Role="SolicitudServicio">
+              <PropertyRef Name="idEstadoSolicitud" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_HistorialSolicitud_Solicitud">
+          <End Type="CooperativaModel.SolicitudServicio" Role="SolicitudServicio" Multiplicity="1" />
+          <End Type="CooperativaModel.HistorialEstadoSolicitud" Role="HistorialEstadoSolicitud" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="SolicitudServicio">
+              <PropertyRef Name="idSolicitudServicio" />
+            </Principal>
+            <Dependent Role="HistorialEstadoSolicitud">
+              <PropertyRef Name="idSolicitudServicio" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_RequisitoServicio_Servicio">
+          <End Type="CooperativaModel.Servicio" Role="Servicio" Multiplicity="1" />
+          <End Type="CooperativaModel.RequisitoServicio" Role="RequisitoServicio" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="Servicio">
+              <PropertyRef Name="idServicio" />
+            </Principal>
+            <Dependent Role="RequisitoServicio">
+              <PropertyRef Name="idServicio" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_SolicitudServicio_Servicio">
+          <End Type="CooperativaModel.Servicio" Role="Servicio" Multiplicity="1" />
+          <End Type="CooperativaModel.SolicitudServicio" Role="SolicitudServicio" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="Servicio">
+              <PropertyRef Name="idServicio" />
+            </Principal>
+            <Dependent Role="SolicitudServicio">
+              <PropertyRef Name="idServicio" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_SolicitudServicio_Socio">
+          <End Type="CooperativaModel.Socio" Role="Socio" Multiplicity="1" />
+          <End Type="CooperativaModel.SolicitudServicio" Role="SolicitudServicio" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="Socio">
+              <PropertyRef Name="idSocio" />
+            </Principal>
+            <Dependent Role="SolicitudServicio">
               <PropertyRef Name="idSocio" />
             </Dependent>
           </ReferentialConstraint>
@@ -1002,6 +1872,135 @@
           </FunctionImportMapping>
           <FunctionImportMapping FunctionImportName="sp_renamediagram" FunctionName="CooperativaModel.Store.sp_renamediagram" />
           <FunctionImportMapping FunctionImportName="sp_upgraddiagrams" FunctionName="CooperativaModel.Store.sp_upgraddiagrams" />
+          <EntitySetMapping Name="EstadoTurno">
+            <EntityTypeMapping TypeName="CooperativaModel.EstadoTurno">
+              <MappingFragment StoreEntitySet="EstadoTurno">
+                <ScalarProperty Name="NombreEstado" ColumnName="NombreEstado" />
+                <ScalarProperty Name="idEstadoTurno" ColumnName="idEstadoTurno" />
+              </MappingFragment>
+            </EntityTypeMapping>
+          </EntitySetMapping>
+          <EntitySetMapping Name="Medicion">
+            <EntityTypeMapping TypeName="CooperativaModel.Medicion">
+              <MappingFragment StoreEntitySet="Medicion">
+                <ScalarProperty Name="Observaciones" ColumnName="Observaciones" />
+                <ScalarProperty Name="FotoURL" ColumnName="FotoURL" />
+                <ScalarProperty Name="Periodo" ColumnName="Periodo" />
+                <ScalarProperty Name="ConsumoCalculado" ColumnName="ConsumoCalculado" />
+                <ScalarProperty Name="ValorLectura" ColumnName="ValorLectura" />
+                <ScalarProperty Name="FechaCarga" ColumnName="FechaCarga" />
+                <ScalarProperty Name="FechaLectura" ColumnName="FechaLectura" />
+                <ScalarProperty Name="idTipoLectura" ColumnName="idTipoLectura" />
+                <ScalarProperty Name="idMedidor" ColumnName="idMedidor" />
+                <ScalarProperty Name="idEmpleado" ColumnName="idEmpleado" />
+                <ScalarProperty Name="idServicioSocio" ColumnName="idServicioSocio" />
+                <ScalarProperty Name="idMedicion" ColumnName="idMedicion" />
+              </MappingFragment>
+            </EntityTypeMapping>
+          </EntitySetMapping>
+          <EntitySetMapping Name="TipoLectura">
+            <EntityTypeMapping TypeName="CooperativaModel.TipoLectura">
+              <MappingFragment StoreEntitySet="TipoLectura">
+                <ScalarProperty Name="Nombre" ColumnName="Nombre" />
+                <ScalarProperty Name="idTipoLectura" ColumnName="idTipoLectura" />
+              </MappingFragment>
+            </EntityTypeMapping>
+          </EntitySetMapping>
+          <EntitySetMapping Name="Turno">
+            <EntityTypeMapping TypeName="CooperativaModel.Turno">
+              <MappingFragment StoreEntitySet="Turno">
+                <ScalarProperty Name="Observaciones" ColumnName="Observaciones" />
+                <ScalarProperty Name="Motivo" ColumnName="Motivo" />
+                <ScalarProperty Name="Hora" ColumnName="Hora" />
+                <ScalarProperty Name="Fecha" ColumnName="Fecha" />
+                <ScalarProperty Name="idEstadoTurno" ColumnName="idEstadoTurno" />
+                <ScalarProperty Name="idSocio" ColumnName="idSocio" />
+                <ScalarProperty Name="idTurno" ColumnName="idTurno" />
+              </MappingFragment>
+            </EntityTypeMapping>
+          </EntitySetMapping>
+          <EntitySetMapping Name="TipoMedidor">
+            <EntityTypeMapping TypeName="CooperativaModel.TipoMedidor">
+              <MappingFragment StoreEntitySet="TipoMedidor">
+                <ScalarProperty Name="Nombre" ColumnName="Nombre" />
+                <ScalarProperty Name="idTipoMedidor" ColumnName="idTipoMedidor" />
+              </MappingFragment>
+            </EntityTypeMapping>
+          </EntitySetMapping>
+          <EntitySetMapping Name="Medidor">
+            <EntityTypeMapping TypeName="CooperativaModel.Medidor">
+              <MappingFragment StoreEntitySet="Medidor">
+                <ScalarProperty Name="FechaInstalacion" ColumnName="FechaInstalacion" />
+                <ScalarProperty Name="idTipoMedidor" ColumnName="idTipoMedidor" />
+                <ScalarProperty Name="Activo" ColumnName="Activo" />
+                <ScalarProperty Name="idServicioSocio" ColumnName="idServicioSocio" />
+                <ScalarProperty Name="Numero" ColumnName="Numero" />
+                <ScalarProperty Name="idMedidor" ColumnName="idMedidor" />
+              </MappingFragment>
+            </EntityTypeMapping>
+          </EntitySetMapping>
+          <EntitySetMapping Name="DocumentoSolicitud">
+            <EntityTypeMapping TypeName="CooperativaModel.DocumentoSolicitud">
+              <MappingFragment StoreEntitySet="DocumentoSolicitud">
+                <ScalarProperty Name="Aprobado" ColumnName="Aprobado" />
+                <ScalarProperty Name="Observaciones" ColumnName="Observaciones" />
+                <ScalarProperty Name="FechaSubida" ColumnName="FechaSubida" />
+                <ScalarProperty Name="TipoArchivo" ColumnName="TipoArchivo" />
+                <ScalarProperty Name="RutaArchivo" ColumnName="RutaArchivo" />
+                <ScalarProperty Name="NombreArchivo" ColumnName="NombreArchivo" />
+                <ScalarProperty Name="idRequisitoServicio" ColumnName="idRequisitoServicio" />
+                <ScalarProperty Name="idSolicitudServicio" ColumnName="idSolicitudServicio" />
+                <ScalarProperty Name="idDocumentoSolicitud" ColumnName="idDocumentoSolicitud" />
+              </MappingFragment>
+            </EntityTypeMapping>
+          </EntitySetMapping>
+          <EntitySetMapping Name="EstadoSolicitudServicio">
+            <EntityTypeMapping TypeName="CooperativaModel.EstadoSolicitudServicio">
+              <MappingFragment StoreEntitySet="EstadoSolicitudServicio">
+                <ScalarProperty Name="NombreEstado" ColumnName="NombreEstado" />
+                <ScalarProperty Name="idEstadoSolicitud" ColumnName="idEstadoSolicitud" />
+              </MappingFragment>
+            </EntityTypeMapping>
+          </EntitySetMapping>
+          <EntitySetMapping Name="HistorialEstadoSolicitud">
+            <EntityTypeMapping TypeName="CooperativaModel.HistorialEstadoSolicitud">
+              <MappingFragment StoreEntitySet="HistorialEstadoSolicitud">
+                <ScalarProperty Name="Observaciones" ColumnName="Observaciones" />
+                <ScalarProperty Name="FechaCambio" ColumnName="FechaCambio" />
+                <ScalarProperty Name="idEmpleado" ColumnName="idEmpleado" />
+                <ScalarProperty Name="idEstadoSolicitud" ColumnName="idEstadoSolicitud" />
+                <ScalarProperty Name="idSolicitudServicio" ColumnName="idSolicitudServicio" />
+                <ScalarProperty Name="idHistorialEstadoSolicitud" ColumnName="idHistorialEstadoSolicitud" />
+              </MappingFragment>
+            </EntityTypeMapping>
+          </EntitySetMapping>
+          <EntitySetMapping Name="RequisitoServicio">
+            <EntityTypeMapping TypeName="CooperativaModel.RequisitoServicio">
+              <MappingFragment StoreEntitySet="RequisitoServicio">
+                <ScalarProperty Name="Activo" ColumnName="Activo" />
+                <ScalarProperty Name="Obligatorio" ColumnName="Obligatorio" />
+                <ScalarProperty Name="Descripcion" ColumnName="Descripcion" />
+                <ScalarProperty Name="Nombre" ColumnName="Nombre" />
+                <ScalarProperty Name="idServicio" ColumnName="idServicio" />
+                <ScalarProperty Name="idRequisitoServicio" ColumnName="idRequisitoServicio" />
+              </MappingFragment>
+            </EntityTypeMapping>
+          </EntitySetMapping>
+          <EntitySetMapping Name="SolicitudServicio">
+            <EntityTypeMapping TypeName="CooperativaModel.SolicitudServicio">
+              <MappingFragment StoreEntitySet="SolicitudServicio">
+                <ScalarProperty Name="MotivoRechazo" ColumnName="MotivoRechazo" />
+                <ScalarProperty Name="idEmpleadoRevisor" ColumnName="idEmpleadoRevisor" />
+                <ScalarProperty Name="FechaResolucion" ColumnName="FechaResolucion" />
+                <ScalarProperty Name="Observaciones" ColumnName="Observaciones" />
+                <ScalarProperty Name="FechaSolicitud" ColumnName="FechaSolicitud" />
+                <ScalarProperty Name="idEstadoSolicitud" ColumnName="idEstadoSolicitud" />
+                <ScalarProperty Name="idServicio" ColumnName="idServicio" />
+                <ScalarProperty Name="idSocio" ColumnName="idSocio" />
+                <ScalarProperty Name="idSolicitudServicio" ColumnName="idSolicitudServicio" />
+              </MappingFragment>
+            </EntityTypeMapping>
+          </EntitySetMapping>
         </EntityContainerMapping>
       </Mapping>
     </edmx:Mappings>

@@ -14,6 +14,13 @@ namespace CooperativaAPI
     
     public partial class ServicioSocio
     {
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Usage", "CA2214:DoNotCallOverridableMethodsInConstructors")]
+        public ServicioSocio()
+        {
+            this.Medicion = new HashSet<Medicion>();
+            this.Medidor = new HashSet<Medidor>();
+        }
+    
         public int idServicioSocio { get; set; }
         public int idSocio { get; set; }
         public int idServicio { get; set; }
@@ -24,5 +31,9 @@ namespace CooperativaAPI
     
         public virtual Servicio Servicio { get; set; }
         public virtual Socio Socio { get; set; }
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Usage", "CA2227:CollectionPropertiesShouldBeReadOnly")]
+        public virtual ICollection<Medicion> Medicion { get; set; }
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Usage", "CA2227:CollectionPropertiesShouldBeReadOnly")]
+        public virtual ICollection<Medidor> Medidor { get; set; }
     }
 }

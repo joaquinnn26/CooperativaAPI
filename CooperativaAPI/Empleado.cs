@@ -18,6 +18,9 @@ namespace CooperativaAPI
         public Empleado()
         {
             this.UsuarioSistema = new HashSet<UsuarioSistema>();
+            this.Medicion = new HashSet<Medicion>();
+            this.HistorialEstadoSolicitud = new HashSet<HistorialEstadoSolicitud>();
+            this.SolicitudServicio = new HashSet<SolicitudServicio>();
         }
     
         public int idEmpleado { get; set; }
@@ -30,5 +33,11 @@ namespace CooperativaAPI
         public virtual Persona Persona { get; set; }
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Usage", "CA2227:CollectionPropertiesShouldBeReadOnly")]
         public virtual ICollection<UsuarioSistema> UsuarioSistema { get; set; }
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Usage", "CA2227:CollectionPropertiesShouldBeReadOnly")]
+        public virtual ICollection<Medicion> Medicion { get; set; }
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Usage", "CA2227:CollectionPropertiesShouldBeReadOnly")]
+        public virtual ICollection<HistorialEstadoSolicitud> HistorialEstadoSolicitud { get; set; }
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Usage", "CA2227:CollectionPropertiesShouldBeReadOnly")]
+        public virtual ICollection<SolicitudServicio> SolicitudServicio { get; set; }
     }
 }
