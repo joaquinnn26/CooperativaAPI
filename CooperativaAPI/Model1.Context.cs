@@ -52,6 +52,7 @@ namespace CooperativaAPI
         public virtual DbSet<HistorialEstadoSolicitud> HistorialEstadoSolicitud { get; set; }
         public virtual DbSet<RequisitoServicio> RequisitoServicio { get; set; }
         public virtual DbSet<SolicitudServicio> SolicitudServicio { get; set; }
+        public virtual DbSet<Factura> Factura { get; set; }
     
         public virtual int sp_alterdiagram(string diagramname, Nullable<int> owner_id, Nullable<int> version, byte[] definition)
         {

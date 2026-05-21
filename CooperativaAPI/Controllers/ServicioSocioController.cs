@@ -6,12 +6,11 @@ using CooperativaAPI.Data;
 
 namespace CooperativaAPI.Controllers
 {
-    [RoutePrefix("api/servicioSocio")]
+    [RoutePrefix("api/serviciosocio")]
     public class ServicioSocioController : ApiController
     {
         private CooperativaEntities db = new CooperativaEntities();
 
- 
         [HttpPost]
         [Route("{idSocio}")]
         public IHttpActionResult ActualizarServicios(int idSocio, [FromBody] List<int> serviciosSeleccionados)
@@ -62,10 +61,20 @@ namespace CooperativaAPI.Controllers
         {
             try
             {
-                var servicios = db.ServicioSocio
-                    .Where(ss => ss.idSocio == idSocio)
-                    .Select(ss => ss.idServicio)
-                    .ToList();
+                var servicios = (
+                    from ss in db.ServicioSocio
+                    join s in db.Servicio on ss.idServicio equals s.idServicio
+                    where ss.idSocio == idSocio
+                    select new
+                    {
+                        ss.idServicioSocio,
+                        ss.idSocio,
+                        ss.idServicio,
+                        Servicio = s.Nombre,
+                        s.Descripcion,
+                        s.TarifaBase
+                    }
+                ).ToList();
 
                 return Ok(servicios);
             }

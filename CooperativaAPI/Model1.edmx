@@ -67,6 +67,23 @@
           <Property Name="idEstadoTurno" Type="int" StoreGeneratedPattern="Identity" Nullable="false" />
           <Property Name="NombreEstado" Type="varchar" MaxLength="50" Nullable="false" />
         </EntityType>
+        <EntityType Name="Factura">
+          <Key>
+            <PropertyRef Name="idFactura" />
+          </Key>
+          <Property Name="idFactura" Type="int" StoreGeneratedPattern="Identity" Nullable="false" />
+          <Property Name="idSocio" Type="int" Nullable="false" />
+          <Property Name="idEmpleado" Type="int" Nullable="false" />
+          <Property Name="idServicio" Type="int" Nullable="false" />
+          <Property Name="MontoTotal" Type="decimal" Precision="18" Scale="2" Nullable="false" />
+          <Property Name="FechaEmision" Type="datetime" Nullable="false" />
+          <Property Name="FechaCaducidad" Type="datetime" Nullable="false" />
+          <Property Name="LinkPago" Type="nvarchar" MaxLength="500" />
+          <Property Name="Pagada" Type="bit" Nullable="false" />
+          <Property Name="FechaPago" Type="datetime" />
+          <Property Name="Observaciones" Type="nvarchar" MaxLength="500" />
+          <Property Name="Activo" Type="bit" Nullable="false" />
+        </EntityType>
         <EntityType Name="HistorialEstadoSolicitud">
           <Key>
             <PropertyRef Name="idHistorialEstadoSolicitud" />
@@ -425,6 +442,42 @@
             </Dependent>
           </ReferentialConstraint>
         </Association>
+        <Association Name="FK_Factura_Empleado">
+          <End Role="Empleado" Type="Self.Empleado" Multiplicity="1" />
+          <End Role="Factura" Type="Self.Factura" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="Empleado">
+              <PropertyRef Name="idEmpleado" />
+            </Principal>
+            <Dependent Role="Factura">
+              <PropertyRef Name="idEmpleado" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_Factura_Servicio">
+          <End Role="Servicio" Type="Self.Servicio" Multiplicity="1" />
+          <End Role="Factura" Type="Self.Factura" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="Servicio">
+              <PropertyRef Name="idServicio" />
+            </Principal>
+            <Dependent Role="Factura">
+              <PropertyRef Name="idServicio" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_Factura_Socio">
+          <End Role="Socio" Type="Self.Socio" Multiplicity="1" />
+          <End Role="Factura" Type="Self.Factura" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="Socio">
+              <PropertyRef Name="idSocio" />
+            </Principal>
+            <Dependent Role="Factura">
+              <PropertyRef Name="idSocio" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
         <Association Name="FK_HistorialSolicitud_Empleado">
           <End Role="Empleado" Type="Self.Empleado" Multiplicity="0..1" />
           <End Role="HistorialEstadoSolicitud" Type="Self.HistorialEstadoSolicitud" Multiplicity="*" />
@@ -682,6 +735,7 @@
           <EntitySet Name="EstadoReclamo" EntityType="Self.EstadoReclamo" Schema="dbo" store:Type="Tables" />
           <EntitySet Name="EstadoSolicitudServicio" EntityType="Self.EstadoSolicitudServicio" Schema="dbo" store:Type="Tables" />
           <EntitySet Name="EstadoTurno" EntityType="Self.EstadoTurno" Schema="dbo" store:Type="Tables" />
+          <EntitySet Name="Factura" EntityType="Self.Factura" Schema="dbo" store:Type="Tables" />
           <EntitySet Name="HistorialEstadoSolicitud" EntityType="Self.HistorialEstadoSolicitud" Schema="dbo" store:Type="Tables" />
           <EntitySet Name="Medicion" EntityType="Self.Medicion" Schema="dbo" store:Type="Tables" />
           <EntitySet Name="Medidor" EntityType="Self.Medidor" Schema="dbo" store:Type="Tables" />
@@ -755,6 +809,18 @@
           <AssociationSet Name="FK_DocumentoSolicitud_Solicitud" Association="Self.FK_DocumentoSolicitud_Solicitud">
             <End Role="SolicitudServicio" EntitySet="SolicitudServicio" />
             <End Role="DocumentoSolicitud" EntitySet="DocumentoSolicitud" />
+          </AssociationSet>
+          <AssociationSet Name="FK_Factura_Empleado" Association="Self.FK_Factura_Empleado">
+            <End Role="Empleado" EntitySet="Empleado" />
+            <End Role="Factura" EntitySet="Factura" />
+          </AssociationSet>
+          <AssociationSet Name="FK_Factura_Servicio" Association="Self.FK_Factura_Servicio">
+            <End Role="Servicio" EntitySet="Servicio" />
+            <End Role="Factura" EntitySet="Factura" />
+          </AssociationSet>
+          <AssociationSet Name="FK_Factura_Socio" Association="Self.FK_Factura_Socio">
+            <End Role="Socio" EntitySet="Socio" />
+            <End Role="Factura" EntitySet="Factura" />
           </AssociationSet>
           <AssociationSet Name="FK_HistorialSolicitud_Empleado" Association="Self.FK_HistorialSolicitud_Empleado">
             <End Role="Empleado" EntitySet="Empleado" />
@@ -866,6 +932,7 @@
           <NavigationProperty Name="Medicion" Relationship="CooperativaModel.FK_Medicion_Empleado" FromRole="Empleado" ToRole="Medicion" />
           <NavigationProperty Name="HistorialEstadoSolicitud" Relationship="CooperativaModel.FK_HistorialSolicitud_Empleado" FromRole="Empleado" ToRole="HistorialEstadoSolicitud" />
           <NavigationProperty Name="SolicitudServicio" Relationship="CooperativaModel.FK_SolicitudServicio_Empleado" FromRole="Empleado" ToRole="SolicitudServicio" />
+          <NavigationProperty Name="Factura" Relationship="CooperativaModel.FK_Factura_Empleado" FromRole="Empleado" ToRole="Factura" />
         </EntityType>
         <EntityType Name="EstadoReclamo">
           <Key>
@@ -927,6 +994,7 @@
           <NavigationProperty Name="ServicioSocio" Relationship="Self.FK__ServicioS__idSer__4E88ABD4" FromRole="Servicio" ToRole="ServicioSocio" />
           <NavigationProperty Name="RequisitoServicio" Relationship="CooperativaModel.FK_RequisitoServicio_Servicio" FromRole="Servicio" ToRole="RequisitoServicio" />
           <NavigationProperty Name="SolicitudServicio" Relationship="CooperativaModel.FK_SolicitudServicio_Servicio" FromRole="Servicio" ToRole="SolicitudServicio" />
+          <NavigationProperty Name="Factura" Relationship="CooperativaModel.FK_Factura_Servicio" FromRole="Servicio" ToRole="Factura" />
         </EntityType>
         <EntityType Name="ServicioSocio">
           <Key>
@@ -958,6 +1026,7 @@
           <NavigationProperty Name="UsuarioSistema2" Relationship="CooperativaModel.FK_UsuarioSistema_Socios" FromRole="Socio" ToRole="UsuarioSistema" />
           <NavigationProperty Name="Turno" Relationship="CooperativaModel.FK_Turno_Socio" FromRole="Socio" ToRole="Turno" />
           <NavigationProperty Name="SolicitudServicio" Relationship="CooperativaModel.FK_SolicitudServicio_Socio" FromRole="Socio" ToRole="SolicitudServicio" />
+          <NavigationProperty Name="Factura" Relationship="CooperativaModel.FK_Factura_Socio" FromRole="Socio" ToRole="Factura" />
         </EntityType>
         <EntityType Name="TipoReclamo">
           <Key>
@@ -1297,6 +1366,19 @@
           <AssociationSet Name="FK_SolicitudServicio_Socio" Association="CooperativaModel.FK_SolicitudServicio_Socio">
             <End Role="Socio" EntitySet="Socio" />
             <End Role="SolicitudServicio" EntitySet="SolicitudServicio" />
+          </AssociationSet>
+          <EntitySet Name="Factura" EntityType="CooperativaModel.Factura" />
+          <AssociationSet Name="FK_Factura_Empleado" Association="CooperativaModel.FK_Factura_Empleado">
+            <End Role="Empleado" EntitySet="Empleado" />
+            <End Role="Factura" EntitySet="Factura" />
+          </AssociationSet>
+          <AssociationSet Name="FK_Factura_Servicio" Association="CooperativaModel.FK_Factura_Servicio">
+            <End Role="Servicio" EntitySet="Servicio" />
+            <End Role="Factura" EntitySet="Factura" />
+          </AssociationSet>
+          <AssociationSet Name="FK_Factura_Socio" Association="CooperativaModel.FK_Factura_Socio">
+            <End Role="Socio" EntitySet="Socio" />
+            <End Role="Factura" EntitySet="Factura" />
           </AssociationSet>
         </EntityContainer>
         <EntityType Name="sysdiagrams">
@@ -1695,6 +1777,62 @@
             </Dependent>
           </ReferentialConstraint>
         </Association>
+        <EntityType Name="Factura">
+          <Key>
+            <PropertyRef Name="idFactura" />
+          </Key>
+          <Property Name="idFactura" Type="Int32" Nullable="false" annotation:StoreGeneratedPattern="Identity" />
+          <Property Name="idSocio" Type="Int32" Nullable="false" />
+          <Property Name="idEmpleado" Type="Int32" Nullable="false" />
+          <Property Name="idServicio" Type="Int32" Nullable="false" />
+          <Property Name="MontoTotal" Type="Decimal" Nullable="false" Precision="18" Scale="2" />
+          <Property Name="FechaEmision" Type="DateTime" Nullable="false" Precision="3" />
+          <Property Name="FechaCaducidad" Type="DateTime" Nullable="false" Precision="3" />
+          <Property Name="LinkPago" Type="String" MaxLength="500" FixedLength="false" Unicode="true" />
+          <Property Name="Pagada" Type="Boolean" Nullable="false" />
+          <Property Name="FechaPago" Type="DateTime" Precision="3" />
+          <Property Name="Observaciones" Type="String" MaxLength="500" FixedLength="false" Unicode="true" />
+          <Property Name="Activo" Type="Boolean" Nullable="false" />
+          <NavigationProperty Name="Empleado" Relationship="CooperativaModel.FK_Factura_Empleado" FromRole="Factura" ToRole="Empleado" />
+          <NavigationProperty Name="Servicio" Relationship="CooperativaModel.FK_Factura_Servicio" FromRole="Factura" ToRole="Servicio" />
+          <NavigationProperty Name="Socio" Relationship="CooperativaModel.FK_Factura_Socio" FromRole="Factura" ToRole="Socio" />
+        </EntityType>
+        <Association Name="FK_Factura_Empleado">
+          <End Type="CooperativaModel.Empleado" Role="Empleado" Multiplicity="1" />
+          <End Type="CooperativaModel.Factura" Role="Factura" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="Empleado">
+              <PropertyRef Name="idEmpleado" />
+            </Principal>
+            <Dependent Role="Factura">
+              <PropertyRef Name="idEmpleado" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_Factura_Servicio">
+          <End Type="CooperativaModel.Servicio" Role="Servicio" Multiplicity="1" />
+          <End Type="CooperativaModel.Factura" Role="Factura" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="Servicio">
+              <PropertyRef Name="idServicio" />
+            </Principal>
+            <Dependent Role="Factura">
+              <PropertyRef Name="idServicio" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_Factura_Socio">
+          <End Type="CooperativaModel.Socio" Role="Socio" Multiplicity="1" />
+          <End Type="CooperativaModel.Factura" Role="Factura" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="Socio">
+              <PropertyRef Name="idSocio" />
+            </Principal>
+            <Dependent Role="Factura">
+              <PropertyRef Name="idSocio" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
       </Schema>
     </edmx:ConceptualModels>
     <!-- C-S mapping content -->
@@ -1998,6 +2136,24 @@
                 <ScalarProperty Name="idServicio" ColumnName="idServicio" />
                 <ScalarProperty Name="idSocio" ColumnName="idSocio" />
                 <ScalarProperty Name="idSolicitudServicio" ColumnName="idSolicitudServicio" />
+              </MappingFragment>
+            </EntityTypeMapping>
+          </EntitySetMapping>
+          <EntitySetMapping Name="Factura">
+            <EntityTypeMapping TypeName="CooperativaModel.Factura">
+              <MappingFragment StoreEntitySet="Factura">
+                <ScalarProperty Name="Activo" ColumnName="Activo" />
+                <ScalarProperty Name="Observaciones" ColumnName="Observaciones" />
+                <ScalarProperty Name="FechaPago" ColumnName="FechaPago" />
+                <ScalarProperty Name="Pagada" ColumnName="Pagada" />
+                <ScalarProperty Name="LinkPago" ColumnName="LinkPago" />
+                <ScalarProperty Name="FechaCaducidad" ColumnName="FechaCaducidad" />
+                <ScalarProperty Name="FechaEmision" ColumnName="FechaEmision" />
+                <ScalarProperty Name="MontoTotal" ColumnName="MontoTotal" />
+                <ScalarProperty Name="idServicio" ColumnName="idServicio" />
+                <ScalarProperty Name="idEmpleado" ColumnName="idEmpleado" />
+                <ScalarProperty Name="idSocio" ColumnName="idSocio" />
+                <ScalarProperty Name="idFactura" ColumnName="idFactura" />
               </MappingFragment>
             </EntityTypeMapping>
           </EntitySetMapping>

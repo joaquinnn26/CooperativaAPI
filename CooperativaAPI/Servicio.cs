@@ -20,6 +20,7 @@ namespace CooperativaAPI
             this.ServicioSocio = new HashSet<ServicioSocio>();
             this.RequisitoServicio = new HashSet<RequisitoServicio>();
             this.SolicitudServicio = new HashSet<SolicitudServicio>();
+            this.Factura = new HashSet<Factura>();
         }
     
         public int idServicio { get; set; }
@@ -35,5 +36,7 @@ namespace CooperativaAPI
         public virtual ICollection<RequisitoServicio> RequisitoServicio { get; set; }
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Usage", "CA2227:CollectionPropertiesShouldBeReadOnly")]
         public virtual ICollection<SolicitudServicio> SolicitudServicio { get; set; }
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Usage", "CA2227:CollectionPropertiesShouldBeReadOnly")]
+        public virtual ICollection<Factura> Factura { get; set; }
     }
 }

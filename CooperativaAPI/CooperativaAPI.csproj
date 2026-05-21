@@ -203,6 +203,7 @@
     <Compile Include="Controllers\DocumentoSolicitudController.cs" />
     <Compile Include="Controllers\EmpleadoController.cs" />
     <Compile Include="Controllers\EstadoSolicitudController.cs" />
+    <Compile Include="Controllers\FacturaController.cs" />
     <Compile Include="Controllers\HomeController.cs" />
     <Compile Include="Controllers\MedicionController.cs" />
     <Compile Include="Controllers\MedidorController.cs" />
@@ -224,6 +225,7 @@
     <Compile Include="DocumentoSolicitud.cs">
       <DependentUpon>Model1.tt</DependentUpon>
     </Compile>
+    <Compile Include="DTOs\Class1.cs" />
     <Compile Include="DTOs\LoginRequest.cs" />
     <Compile Include="Empleado.cs">
       <DependentUpon>Model1.tt</DependentUpon>
@@ -235,6 +237,9 @@
       <DependentUpon>Model1.tt</DependentUpon>
     </Compile>
     <Compile Include="EstadoTurno.cs">
+      <DependentUpon>Model1.tt</DependentUpon>
+    </Compile>
+    <Compile Include="Factura.cs">
       <DependentUpon>Model1.tt</DependentUpon>
     </Compile>
     <Compile Include="Filters\JwtAuthorizeAttribute.cs" />
@@ -395,6 +400,8 @@
     <Folder Include="Views\DocumentoSolicitud\" />
     <Folder Include="Views\Empleado\" />
     <Folder Include="Views\EstadoSolicitud\" />
+    <Folder Include="Views\Factura\" />
+    <Folder Include="Views\Login\" />
     <Folder Include="Views\Medicion\" />
     <Folder Include="Views\Medidor\" />
     <Folder Include="Views\Persona\" />

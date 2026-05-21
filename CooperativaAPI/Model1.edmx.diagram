@@ -60,6 +60,10 @@
         <AssociationConnector Association="CooperativaModel.FK_RequisitoServicio_Servicio" />
         <AssociationConnector Association="CooperativaModel.FK_SolicitudServicio_Servicio" />
         <AssociationConnector Association="CooperativaModel.FK_SolicitudServicio_Socio" />
+        <EntityTypeShape EntityType="CooperativaModel.Factura" Width="1.5" PointX="13.25" PointY="11.125" />
+        <AssociationConnector Association="CooperativaModel.FK_Factura_Empleado" />
+        <AssociationConnector Association="CooperativaModel.FK_Factura_Servicio" />
+        <AssociationConnector Association="CooperativaModel.FK_Factura_Socio" />
       </Diagram>
     </edmx:Diagrams>
   </edmx:Designer>

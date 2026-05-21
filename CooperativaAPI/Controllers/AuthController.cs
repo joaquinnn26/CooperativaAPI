@@ -4,6 +4,8 @@ using System.Web.Http;
 using System.Data.Entity;
 using CooperativaAPI.DTOs;
 using CooperativaAPI.Helpers;
+using CooperativaAPI.Data;
+
 namespace CooperativaAPI.Controllers
 {
     [RoutePrefix("api/auth")]
@@ -24,19 +26,15 @@ namespace CooperativaAPI.Controllers
 
             try
             {
-                // 1. Buscar usuario
-                var usuario = (from u in db.UsuarioSistema
-                               join s in db.Socio on u.idSocio equals s.idSocio
-                               join p in db.Persona on s.idPersona equals p.idPersona
-                               where p.Email == request.Email
-                               select u)
-               .FirstOrDefault();
-
+                var usuario = db.UsuarioSistema
+                    .Include(u => u.Rol)
+                    .Include(u => u.Socio2.Persona)
+                    .Include(u => u.Empleado.Cargo)
+                    .FirstOrDefault(u => u.Socio2.Persona.Email == request.Email);
 
                 if (usuario == null)
                     return Unauthorized();
 
-                // 2. Verificar contraseña (SHA256)
                 bool passwordValida = PasswordHelpers.Verificar(
                     request.Password,
                     usuario.Contrasenia
@@ -45,15 +43,25 @@ namespace CooperativaAPI.Controllers
                 if (!passwordValida)
                     return Unauthorized();
 
-                // 3. Respuesta
+                if (usuario.idEmpleado.HasValue && usuario.Empleado != null)
+                    return BadRequest("El empleado se encuentra inactivo.");
+
                 string token = JwtHelper.GenerarToken(usuario);
+
+                var persona = usuario.Socio2?.Persona;
+                var cargo = usuario.Empleado?.Cargo?.NombreCargo;
 
                 return Ok(new
                 {
                     mensaje = "Login exitoso",
                     token = token,
                     usuario = usuario.Usuario,
-                    rol = usuario.Rol.NombreRol
+                    nombre = persona != null ? (persona.Nombre + " " + persona.Apellido).Trim() : usuario.Usuario,
+                    email = persona?.Email,
+                    rol = usuario.Rol?.NombreRol,
+                    idSocio = usuario.idSocio,
+                    idEmpleado = usuario.idEmpleado,
+                    cargo = cargo
                 });
             }
             catch (Exception ex)
@@ -63,3 +71,4 @@ namespace CooperativaAPI.Controllers
         }
     }
 }
+
