@@ -198,6 +198,7 @@
     <Compile Include="Cargo.cs">
       <DependentUpon>Model1.tt</DependentUpon>
     </Compile>
+    <Compile Include="Controllers\AdminDashboardController.cs" />
     <Compile Include="Controllers\AuthController.cs" />
     <Compile Include="Controllers\CargoController.cs" />
     <Compile Include="Controllers\DocumentoSolicitudController.cs" />
@@ -214,6 +215,7 @@
     <Compile Include="Controllers\ServicioSocioController.cs" />
     <Compile Include="Controllers\SocioController.cs" />
     <Compile Include="Controllers\SolicitudServicioController.cs" />
+    <Compile Include="Controllers\TurnosController.cs" />
     <Compile Include="Controllers\TipoLecturaController.cs" />
     <Compile Include="Controllers\TipoMedidorController.cs" />
     <Compile Include="Controllers\TipoTarifaController.cs" />
@@ -396,6 +398,7 @@
   </ItemGroup>
   <ItemGroup>
     <Folder Include="App_Data\" />
+    <Folder Include="Views\AdminDashboard\" />
     <Folder Include="Views\Cargo\" />
     <Folder Include="Views\DocumentoSolicitud\" />
     <Folder Include="Views\Empleado\" />
