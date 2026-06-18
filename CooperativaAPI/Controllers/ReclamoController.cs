@@ -2,6 +2,8 @@
 using System.Linq;
 using System.Web.Http;
 using System.Net;
+using System.Security.Claims;
+using CooperativaAPI.Filters;
 
 
 namespace CooperativaAPI.Controllers
@@ -12,10 +14,14 @@ namespace CooperativaAPI.Controllers
         private CooperativaEntities db = new CooperativaEntities();
         [HttpGet]
         [Route("socio/{idSocio:int}")]
+        [JwtAuthorize(Roles = "Administrador,Socio")]
         public IHttpActionResult GetReclamosPorSocio(int idSocio)
         {
             try
             {
+                if (User.IsInRole("Socio") && ObtenerClaimEntero("idSocio") != idSocio)
+                    return Content(HttpStatusCode.Forbidden, "No puedes consultar reclamos de otro socio.");
+
                 var reclamos = db.Reclamo
                     .Where(r => r.idSocio == idSocio && r.Activo == true)
                     .Select(r => new
@@ -39,6 +45,7 @@ namespace CooperativaAPI.Controllers
         }
         [HttpGet]
         [Route("tipoReclamo")]
+        [JwtAuthorize(Roles = "Administrador,Socio")]
         public IHttpActionResult GetTipoReclamo()
         {
             try
@@ -61,6 +68,7 @@ namespace CooperativaAPI.Controllers
 
         [HttpGet]
         [Route("")]
+        [JwtAuthorize(Roles = "Administrador")]
         public IHttpActionResult GetAll()
         {
             try
@@ -97,12 +105,17 @@ namespace CooperativaAPI.Controllers
 
         [HttpPost]
         [Route("")]
+        [JwtAuthorize(Roles = "Socio")]
         public IHttpActionResult Crear([FromBody] Reclamo nuevo)
         {
             try
             {
                 if (nuevo == null)
                     return BadRequest("No se recibió ningún reclamo.");
+
+                var idSocioActual = ObtenerClaimEntero("idSocio");
+                if (!idSocioActual.HasValue) return Unauthorized();
+                nuevo.idSocio = idSocioActual.Value;
 
                 if (string.IsNullOrWhiteSpace(nuevo.Descripcion))
                     return BadRequest("La descripción no puede estar vacía.");
@@ -156,6 +169,7 @@ namespace CooperativaAPI.Controllers
 
         [HttpPut]
         [Route("{id:int}")]
+        [JwtAuthorize(Roles = "Administrador")]
         public IHttpActionResult Editar(int id, [FromBody] Reclamo datos)
         {
             try
@@ -173,6 +187,9 @@ namespace CooperativaAPI.Controllers
                     if (!estadoValido)
                         return BadRequest("El estado de reclamo ingresado no existe.");
 
+                    if (!TransicionReclamoValida(reclamo.idEstadoReclamo, datos.idEstadoReclamo))
+                        return BadRequest("La transicion de estado del reclamo no es valida.");
+
                     reclamo.idEstadoReclamo = datos.idEstadoReclamo;
                 }
 
@@ -187,6 +204,7 @@ namespace CooperativaAPI.Controllers
 
         [HttpDelete]
         [Route("{id:int}")]
+        [JwtAuthorize(Roles = "Administrador")]
         public IHttpActionResult Eliminar(int id)
         {
             try
@@ -204,6 +222,21 @@ namespace CooperativaAPI.Controllers
             {
                 return BadRequest("Error al eliminar reclamo: " + ex.Message);
             }
+        }
+
+        private static bool TransicionReclamoValida(int actual, int siguiente)
+        {
+            if (actual == siguiente) return true;
+            if (actual == 1) return siguiente == 2 || siguiente == 4;
+            if (actual == 2) return siguiente == 3 || siguiente == 4;
+            return false;
+        }
+
+        private int? ObtenerClaimEntero(string tipo)
+        {
+            var identity = User?.Identity as ClaimsIdentity;
+            int value;
+            return int.TryParse(identity?.FindFirst(tipo)?.Value, out value) ? value : (int?)null;
         }
     }
 }

@@ -4,8 +4,9 @@ using System.Web.Http;
 using System.Data.Entity;
 using System.Security.Cryptography;
 using System.Text;
-
+using System.Security.Claims;
 using CooperativaAPI.Data;
+using CooperativaAPI.Filters;
 
 namespace CooperativaAPI.Controllers
 {
@@ -18,15 +19,23 @@ namespace CooperativaAPI.Controllers
 
         [HttpGet]
         [Route("")]
+        [JwtAuthorize(Roles = "Administrador,Socio")]
         public IHttpActionResult GetAll()
         {
             try
             {
-                var sociosBD = db.Socio
-                    .Where(s => s.Activo == true)
+                IQueryable<Socio> query = db.Socio
                     .Include("Persona")
-                    .Include("UsuarioSistema2")
-                    .ToList();
+                    .Include("UsuarioSistema2");
+
+                if (User.IsInRole("Socio"))
+                {
+                    var idSocioActual = ObtenerClaimEntero("idSocio");
+                    if (!idSocioActual.HasValue) return Unauthorized();
+                    query = query.Where(s => s.idSocio == idSocioActual.Value);
+                }
+
+                var sociosBD = query.ToList();
 
                 var socios = sociosBD.Select(s => new
                 {
@@ -67,6 +76,7 @@ namespace CooperativaAPI.Controllers
 
         [HttpPost]
         [Route("")]
+        [AllowAnonymous]
         public IHttpActionResult Crear([FromBody] Persona persona)
         {
             if (persona == null)
@@ -132,10 +142,17 @@ namespace CooperativaAPI.Controllers
 
         [HttpPut]
         [Route("{id}")]
+        [JwtAuthorize(Roles = "Administrador,Socio")]
         public IHttpActionResult Editar(int id, [FromBody] Persona personaEditada)
         {
             try
             {
+                if (User.IsInRole("Socio") && ObtenerClaimEntero("idSocio") != id)
+                    return Content(System.Net.HttpStatusCode.Forbidden, "No puedes editar otro socio.");
+
+                if (personaEditada == null)
+                    return BadRequest("Los datos del socio son obligatorios.");
+
                 var socio = db.Socio.Find(id);
                 if (socio == null) return NotFound();
 
@@ -162,6 +179,7 @@ namespace CooperativaAPI.Controllers
 
         [HttpDelete]
         [Route("{id}")]
+        [JwtAuthorize(Roles = "Administrador")]
         public IHttpActionResult Eliminar(int id)
         {
             using (var trans = db.Database.BeginTransaction())
@@ -220,6 +238,7 @@ namespace CooperativaAPI.Controllers
 
         [HttpPut]
         [Route("estado/{id}")]
+        [JwtAuthorize(Roles = "Administrador")]
         public IHttpActionResult CambiarEstadoSocio(int id)
         {
             try
@@ -237,6 +256,13 @@ namespace CooperativaAPI.Controllers
             {
                 return BadRequest("Error al cambiar estado de socio: " + ex.Message);
             }
+        }
+
+        private int? ObtenerClaimEntero(string tipo)
+        {
+            var identity = User?.Identity as ClaimsIdentity;
+            int value;
+            return int.TryParse(identity?.FindFirst(tipo)?.Value, out value) ? value : (int?)null;
         }
 
     }

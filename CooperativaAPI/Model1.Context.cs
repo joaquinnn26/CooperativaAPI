@@ -41,10 +41,8 @@ namespace CooperativaAPI
         public virtual DbSet<TipoTarifa> TipoTarifa { get; set; }
         public virtual DbSet<UsuarioSistema> UsuarioSistema { get; set; }
         public virtual DbSet<sysdiagrams> sysdiagrams { get; set; }
-        public virtual DbSet<EstadoTurno> EstadoTurno { get; set; }
         public virtual DbSet<Medicion> Medicion { get; set; }
         public virtual DbSet<TipoLectura> TipoLectura { get; set; }
-        public virtual DbSet<Turno> Turno { get; set; }
         public virtual DbSet<TipoMedidor> TipoMedidor { get; set; }
         public virtual DbSet<Medidor> Medidor { get; set; }
         public virtual DbSet<DocumentoSolicitud> DocumentoSolicitud { get; set; }
@@ -53,6 +51,10 @@ namespace CooperativaAPI
         public virtual DbSet<RequisitoServicio> RequisitoServicio { get; set; }
         public virtual DbSet<SolicitudServicio> SolicitudServicio { get; set; }
         public virtual DbSet<Factura> Factura { get; set; }
+        public virtual DbSet<EstadoTurno> EstadoTurno { get; set; }
+        public virtual DbSet<Turnos> Turnos { get; set; }
+        public virtual DbSet<RutaMedicion> RutaMedicion { get; set; }
+        public virtual DbSet<RutaMedicionDetalle> RutaMedicionDetalle { get; set; }
     
         public virtual int sp_alterdiagram(string diagramname, Nullable<int> owner_id, Nullable<int> version, byte[] definition)
         {

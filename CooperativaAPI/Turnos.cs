@@ -12,15 +12,21 @@ namespace CooperativaAPI
     using System;
     using System.Collections.Generic;
     
-    public partial class Turno
+    public partial class Turnos
     {
-        public int idTurno { get; set; }
-        public int idSocio { get; set; }
-        public int idEstadoTurno { get; set; }
+        public int IdTurno { get; set; }
+        public int IdSocio { get; set; }
+        public string SocioNombre { get; set; }
+        public string SocioDocumento { get; set; }
         public System.DateTime Fecha { get; set; }
         public System.TimeSpan Hora { get; set; }
         public string Motivo { get; set; }
-        public string Observaciones { get; set; }
+        public int IdEstadoTurno { get; set; }
+        public Nullable<System.DateTime> FechaPropuesta { get; set; }
+        public Nullable<System.TimeSpan> HoraPropuesta { get; set; }
+        public string ObservacionAdmin { get; set; }
+        public System.DateTime FechaCreacion { get; set; }
+        public Nullable<System.DateTime> FechaActualizacion { get; set; }
     
         public virtual EstadoTurno EstadoTurno { get; set; }
         public virtual Socio Socio { get; set; }

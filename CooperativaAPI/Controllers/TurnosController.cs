@@ -6,7 +6,9 @@ using System.Data.SqlClient;
 using System.Globalization;
 using System.Linq;
 using System.Net;
+using System.Security.Claims;
 using System.Web.Http;
+using CooperativaAPI.Filters;
 
 namespace CooperativaAPI.Controllers
 {
@@ -26,6 +28,7 @@ namespace CooperativaAPI.Controllers
 
         [HttpGet]
         [Route("disponibilidad")]
+        [JwtAuthorize(Roles = "Administrador,Socio")]
         public IHttpActionResult ObtenerDisponibilidad(string desde = null, int dias = 12)
         {
             try
@@ -82,10 +85,15 @@ namespace CooperativaAPI.Controllers
 
         [HttpPost]
         [Route("")]
+        [JwtAuthorize(Roles = "Socio")]
         public IHttpActionResult CrearTurno([FromBody] CrearTurnoRequest request)
         {
             try
             {
+                var idSocioActual = ObtenerClaimEntero("idSocio");
+                if (!idSocioActual.HasValue) return Unauthorized();
+                if (request != null) request.IdSocio = idSocioActual.Value;
+
                 DateTime fecha;
                 TimeSpan hora;
                 var error = ValidarTurnoNuevo(request, out fecha, out hora);
@@ -140,10 +148,14 @@ VALUES
 
         [HttpGet]
         [Route("socio/{idSocio:int}")]
+        [JwtAuthorize(Roles = "Administrador,Socio")]
         public IHttpActionResult ObtenerTurnosPorSocio(int idSocio)
         {
             try
             {
+                if (User.IsInRole("Socio") && ObtenerClaimEntero("idSocio") != idSocio)
+                    return Content(HttpStatusCode.Forbidden, "No puedes consultar turnos de otro socio.");
+
                 using (var connection = CrearConexion())
                 using (var command = new SqlCommand(QueryTurnosBase + @"
 WHERE t.IdSocio = @IdSocio
@@ -162,7 +174,54 @@ ORDER BY t.Fecha DESC, t.Hora DESC;", connection))
         }
 
         [HttpPut]
+        [Route("{idTurno:int}/cancelar")]
+        [JwtAuthorize(Roles = "Administrador,Socio")]
+        public IHttpActionResult CancelarTurno(int idTurno)
+        {
+            try
+            {
+                var turnoActual = ObtenerTurnoPorId(idTurno);
+                if (turnoActual == null) return NotFound();
+                if (User.IsInRole("Socio") && ObtenerClaimEntero("idSocio") != turnoActual.IdSocio)
+                    return Content(HttpStatusCode.Forbidden, "No puedes cancelar turnos de otro socio.");
+                if (turnoActual.IdEstadoTurno == 5)
+                    return Ok(ObtenerTurnoDto(idTurno));
+                if (turnoActual.IdEstadoTurno == 4)
+                    return Content(HttpStatusCode.Conflict, "Un turno rechazado no puede cancelarse.");
+
+                using (var connection = CrearConexion())
+                {
+                    connection.Open();
+
+                    using (var command = new SqlCommand(@"
+UPDATE dbo.Turnos
+SET IdEstadoTurno = 5,
+    FechaPropuesta = NULL,
+    HoraPropuesta = NULL,
+    FechaActualizacion = SYSUTCDATETIME()
+WHERE IdTurno = @IdTurno
+  AND IdEstadoTurno NOT IN (4, 5);", connection))
+                    {
+                        command.Parameters.Add("@IdTurno", SqlDbType.Int).Value = idTurno;
+
+                        int filasAfectadas = command.ExecuteNonQuery();
+
+                        if (filasAfectadas == 0)
+                            return Content(HttpStatusCode.Conflict, "El turno no se puede cancelar en su estado actual.");
+                    }
+                }
+
+                return Ok(ObtenerTurnoDto(idTurno));
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        [HttpPut]
         [Route("{idTurno:int}/aceptar-propuesta")]
+        [JwtAuthorize(Roles = "Socio")]
         public IHttpActionResult AceptarPropuesta(int idTurno)
         {
             try
@@ -180,6 +239,18 @@ ORDER BY t.Fecha DESC, t.Hora DESC;", connection))
                         {
                             transaction.Rollback();
                             return NotFound();
+                        }
+
+                        if (ObtenerClaimEntero("idSocio") != turno.IdSocio)
+                        {
+                            transaction.Rollback();
+                            return Content(HttpStatusCode.Forbidden, "No puedes aceptar propuestas de otro socio.");
+                        }
+
+                        if (turno.IdEstadoTurno != 3)
+                        {
+                            transaction.Rollback();
+                            return Content(HttpStatusCode.Conflict, "Solo se puede aceptar un turno en estado Propuesto.");
                         }
 
                         if (!turno.FechaPropuesta.HasValue || !turno.HoraPropuesta.HasValue)
@@ -230,9 +301,23 @@ WHERE IdTurno = @IdTurno;", connection, transaction))
                 return BadRequest(ex.Message);
             }
         }
-
+        [HttpDelete]
+        [Route("{idTurno:int}")]
+        [JwtAuthorize(Roles = "Socio")]
+        public IHttpActionResult EliminarTurno(int idTurno)
+        {
+            return CancelarTurno(idTurno);
+        }
+        [HttpDelete]
+        [Route("~/api/admin/turnos/{idTurno:int}")]
+        [JwtAuthorize(Roles = "Administrador")]
+        public IHttpActionResult EliminarTurnoAdmin(int idTurno)
+        {
+            return CancelarTurno(idTurno);
+        }
         [HttpGet]
         [Route("~/api/admin/turnos")]
+        [JwtAuthorize(Roles = "Administrador")]
         public IHttpActionResult ObtenerTurnosAdmin()
         {
             try
@@ -256,6 +341,7 @@ ORDER BY
 
         [HttpPut]
         [Route("~/api/admin/turnos/{idTurno:int}")]
+        [JwtAuthorize(Roles = "Administrador")]
         public IHttpActionResult ActualizarTurnoAdmin(int idTurno, [FromBody] ActualizarTurnoAdminRequest request)
         {
             try
@@ -277,6 +363,12 @@ ORDER BY
                         {
                             transaction.Rollback();
                             return NotFound();
+                        }
+
+                        if (!TransicionTurnoValida(turno.IdEstadoTurno, estadoId.Value))
+                        {
+                            transaction.Rollback();
+                            return Content(HttpStatusCode.Conflict, "La transicion de estado del turno no es valida.");
                         }
 
                         if (estadoId.Value == 2)
@@ -496,6 +588,11 @@ WHERE t.IdTurno = @IdTurno;", connection, transaction))
             if (string.IsNullOrWhiteSpace(request.Motivo))
             {
                 return "El motivo es obligatorio.";
+            }
+
+            if (request.Motivo.Trim().Length > 500)
+            {
+                return "El motivo no puede superar 500 caracteres.";
             }
 
             fecha = request.Fecha.Value.Date;
@@ -720,6 +817,31 @@ WHERE IdTurno = @IdTurno;", connection, transaction))
         private static bool EstadoValido(int estadoId)
         {
             return estadoId >= 1 && estadoId <= 6;
+        }
+
+        private static bool TransicionTurnoValida(int actual, int siguiente)
+        {
+            if (actual == siguiente) return true;
+            if (actual == 1) return siguiente == 2 || siguiente == 3 || siguiente == 4 || siguiente == 5;
+            if (actual == 3) return siguiente == 3 || siguiente == 4 || siguiente == 5;
+            if (actual == 2 || actual == 6) return siguiente == 5;
+            return false;
+        }
+
+        private TurnoRow ObtenerTurnoPorId(int idTurno)
+        {
+            using (var connection = CrearConexion())
+            {
+                connection.Open();
+                return ObtenerTurnoRow(connection, null, idTurno);
+            }
+        }
+
+        private int? ObtenerClaimEntero(string tipo)
+        {
+            var identity = User?.Identity as ClaimsIdentity;
+            int value;
+            return int.TryParse(identity?.FindFirst(tipo)?.Value, out value) ? value : (int?)null;
         }
 
         private static bool ResolverFechaInicio(string desde, out DateTime fechaInicio)

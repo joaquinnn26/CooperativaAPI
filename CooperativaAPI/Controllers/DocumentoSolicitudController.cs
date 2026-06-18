@@ -1,9 +1,12 @@
 ﻿using System;
 using System.IO;
 using System.Linq;
+using System.Net;
+using System.Security.Claims;
 using System.Web;
 using System.Web.Http;
 using CooperativaAPI.Data;
+using CooperativaAPI.Filters;
 
 namespace CooperativaAPI.Controllers
 {
@@ -14,10 +17,16 @@ namespace CooperativaAPI.Controllers
 
         [HttpGet]
         [Route("solicitud/{idSolicitud}")]
+        [JwtAuthorize(Roles = "Administrador,Socio")]
         public IHttpActionResult GetBySolicitud(int idSolicitud)
         {
             try
             {
+                var solicitud = db.SolicitudServicio.Find(idSolicitud);
+                if (solicitud == null) return NotFound();
+                if (User.IsInRole("Socio") && ObtenerClaimEntero("idSocio") != solicitud.idSocio)
+                    return Content(HttpStatusCode.Forbidden, "No puedes consultar documentos de otra solicitud.");
+
                 var documentos = db.DocumentoSolicitud
                     .Where(d => d.idSolicitudServicio == idSolicitud)
                     .Select(d => new
@@ -42,6 +51,7 @@ namespace CooperativaAPI.Controllers
 
         [HttpPost]
         [Route("upload")]
+        [JwtAuthorize(Roles = "Administrador,Socio")]
         public IHttpActionResult Upload()
         {
             try
@@ -61,19 +71,30 @@ namespace CooperativaAPI.Controllers
                 if (!int.TryParse(rawRequisito, out int idRequisitoServicio))
                     return BadRequest("idRequisitoServicio inválido.");
 
-                bool solicitudExiste = db.SolicitudServicio.Any(s => s.idSolicitudServicio == idSolicitudServicio);
-                if (!solicitudExiste)
+                var solicitud = db.SolicitudServicio.Find(idSolicitudServicio);
+                if (solicitud == null)
                     return BadRequest("La solicitud no existe.");
+                if (User.IsInRole("Socio") && ObtenerClaimEntero("idSocio") != solicitud.idSocio)
+                    return Content(HttpStatusCode.Forbidden, "No puedes subir documentos a una solicitud ajena.");
+                if (solicitud.FechaResolucion.HasValue)
+                    return Content(HttpStatusCode.Conflict, "No se pueden modificar documentos de una solicitud cerrada.");
 
-                bool requisitoExiste = db.RequisitoServicio.Any(r => r.idRequisitoServicio == idRequisitoServicio);
-                if (!requisitoExiste)
-                    return BadRequest("El requisito no existe.");
+                bool requisitoValido = db.RequisitoServicio.Any(r =>
+                    r.idRequisitoServicio == idRequisitoServicio &&
+                    r.idServicio == solicitud.idServicio &&
+                    r.Activo == true);
+                if (!requisitoValido)
+                    return BadRequest("El requisito no existe, esta inactivo o no pertenece al servicio solicitado.");
 
                 var extensionesPermitidas = new[] { ".pdf", ".jpg", ".jpeg", ".png", ".webp" };
                 var extension = Path.GetExtension(archivo.FileName)?.ToLower();
 
                 if (string.IsNullOrEmpty(extension) || !extensionesPermitidas.Contains(extension))
                     return BadRequest("Tipo de archivo no permitido.");
+                if (archivo.ContentLength <= 0)
+                    return BadRequest("El archivo esta vacio.");
+                if (archivo.ContentLength > 5 * 1024 * 1024)
+                    return BadRequest("El archivo no puede superar 5 MB.");
 
                 var carpeta = HttpContext.Current.Server.MapPath("~/Uploads/DocumentosSolicitud");
                 if (!Directory.Exists(carpeta))
@@ -82,6 +103,18 @@ namespace CooperativaAPI.Controllers
                 var nombreGenerado = $"{Guid.NewGuid()}{extension}";
                 var rutaFisica = Path.Combine(carpeta, nombreGenerado);
                 archivo.SaveAs(rutaFisica);
+
+                var anterior = db.DocumentoSolicitud.FirstOrDefault(d =>
+                    d.idSolicitudServicio == idSolicitudServicio &&
+                    d.idRequisitoServicio == idRequisitoServicio);
+
+                if (anterior != null)
+                {
+                    var rutaAnterior = HttpContext.Current.Server.MapPath(anterior.RutaArchivo);
+                    if (!string.IsNullOrWhiteSpace(rutaAnterior) && File.Exists(rutaAnterior))
+                        File.Delete(rutaAnterior);
+                    db.DocumentoSolicitud.Remove(anterior);
+                }
 
                 var documento = new DocumentoSolicitud
                 {
@@ -112,6 +145,13 @@ namespace CooperativaAPI.Controllers
             {
                 return BadRequest("Error al subir documento: " + ex.Message);
             }
+        }
+
+        private int? ObtenerClaimEntero(string tipo)
+        {
+            var identity = User?.Identity as ClaimsIdentity;
+            int value;
+            return int.TryParse(identity?.FindFirst(tipo)?.Value, out value) ? value : (int?)null;
         }
     }
 }

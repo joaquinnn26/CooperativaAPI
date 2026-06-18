@@ -1,7 +1,9 @@
 ﻿using System;
 using System.Linq;
 using System.Web.Http;
+using System.Security.Claims;
 using CooperativaAPI.Data;
+using CooperativaAPI.Filters;
 
 namespace CooperativaAPI.Controllers
 {
@@ -12,11 +14,12 @@ namespace CooperativaAPI.Controllers
 
         [HttpGet]
         [Route("")]
+        [JwtAuthorize(Roles = "Administrador,Empleado")]
         public IHttpActionResult GetAll()
         {
             try
             {
-                var empleados = (
+                var query =
                     from e in db.Empleado
                     join p in db.Persona on e.idPersona equals p.idPersona
                     join c in db.Cargo on e.idCargo equals c.idCargo
@@ -43,8 +46,16 @@ namespace CooperativaAPI.Controllers
                             c.idCargo,
                             Nombre = c.NombreCargo
                         }
-                    }
-                ).ToList();
+                    };
+
+                if (User.IsInRole("Empleado"))
+                {
+                    var idEmpleadoActual = ObtenerClaimEntero("idEmpleado");
+                    if (!idEmpleadoActual.HasValue) return Unauthorized();
+                    query = query.Where(e => e.idEmpleado == idEmpleadoActual.Value);
+                }
+
+                var empleados = query.ToList();
 
                 return Ok(empleados);
             }
@@ -56,6 +67,7 @@ namespace CooperativaAPI.Controllers
 
         [HttpPost]
         [Route("")]
+        [JwtAuthorize(Roles = "Administrador")]
         public IHttpActionResult Crear(dynamic data)
         {
             using (var trans = db.Database.BeginTransaction())
@@ -119,6 +131,7 @@ namespace CooperativaAPI.Controllers
 
         [HttpPut]
         [Route("estado/{id}")]
+        [JwtAuthorize(Roles = "Administrador")]
         public IHttpActionResult CambiarEstado(int id)
         {
             try
@@ -137,6 +150,13 @@ namespace CooperativaAPI.Controllers
             {
                 return BadRequest(ex.Message);
             }
+        }
+
+        private int? ObtenerClaimEntero(string tipo)
+        {
+            var identity = User?.Identity as ClaimsIdentity;
+            int value;
+            return int.TryParse(identity?.FindFirst(tipo)?.Value, out value) ? value : (int?)null;
         }
     }
 }

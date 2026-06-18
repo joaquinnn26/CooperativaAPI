@@ -1,7 +1,10 @@
 ﻿using System;
 using System.Linq;
+using System.Net;
+using System.Security.Claims;
 using System.Web.Http;
 using CooperativaAPI.Data;
+using CooperativaAPI.Filters;
 
 namespace CooperativaAPI.Controllers
 {
@@ -12,6 +15,7 @@ namespace CooperativaAPI.Controllers
 
         [HttpGet]
         [Route("")]
+        [JwtAuthorize(Roles = "Administrador,Empleado")]
         public IHttpActionResult GetAll()
         {
             try
@@ -54,10 +58,14 @@ namespace CooperativaAPI.Controllers
 
         [HttpGet]
         [Route("socio/{idSocio:int}")]
+        [JwtAuthorize(Roles = "Administrador,Socio")]
         public IHttpActionResult GetBySocio(int idSocio)
         {
             try
             {
+                if (User.IsInRole("Socio") && ObtenerClaimEntero("idSocio") != idSocio)
+                    return Content(HttpStatusCode.Forbidden, "No puedes consultar mediciones de otro socio.");
+
                 var mediciones = (
                     from m in db.Medicion
                     join med in db.Medidor on m.idMedidor equals med.idMedidor
@@ -97,6 +105,7 @@ namespace CooperativaAPI.Controllers
 
         [HttpGet]
         [Route("medidor/{idMedidor:int}")]
+        [JwtAuthorize(Roles = "Administrador,Empleado")]
         public IHttpActionResult GetByMedidor(int idMedidor)
         {
             try
@@ -135,12 +144,20 @@ namespace CooperativaAPI.Controllers
 
         [HttpPost]
         [Route("")]
+        [JwtAuthorize(Roles = "Administrador,Empleado")]
         public IHttpActionResult Crear([FromBody] Medicion medicion)
         {
             try
             {
                 if (medicion == null)
                     return BadRequest("Datos inválidos.");
+
+                if (User.IsInRole("Empleado"))
+                {
+                    var idEmpleadoActual = ObtenerClaimEntero("idEmpleado");
+                    if (!idEmpleadoActual.HasValue) return Unauthorized();
+                    medicion.idEmpleado = idEmpleadoActual.Value;
+                }
 
                 var medidor = db.Medidor.FirstOrDefault(m => m.idMedidor == medicion.idMedidor && m.Activo == true);
                 if (medidor == null)
@@ -198,6 +215,7 @@ namespace CooperativaAPI.Controllers
 
         [HttpPut]
         [Route("{id}")]
+        [JwtAuthorize(Roles = "Administrador")]
         public IHttpActionResult Editar(int id, [FromBody] Medicion medicionEditada)
         {
             try
@@ -258,6 +276,7 @@ namespace CooperativaAPI.Controllers
         }
         [HttpDelete]
         [Route("{id}")]
+        [JwtAuthorize(Roles = "Administrador")]
         public IHttpActionResult Eliminar(int id)
         {
             try
@@ -275,6 +294,13 @@ namespace CooperativaAPI.Controllers
             {
                 return BadRequest(ex.Message);
             }
+        }
+
+        private int? ObtenerClaimEntero(string tipo)
+        {
+            var identity = User?.Identity as ClaimsIdentity;
+            int value;
+            return int.TryParse(identity?.FindFirst(tipo)?.Value, out value) ? value : (int?)null;
         }
     }
 }

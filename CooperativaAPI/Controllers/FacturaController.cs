@@ -1,8 +1,11 @@
 ﻿using System;
 using System.Linq;
+using System.Net;
+using System.Security.Claims;
 using System.Web.Http;
 using CooperativaAPI.Data;
 using CooperativaAPI.DTOs;
+using CooperativaAPI.Filters;
 
 namespace CooperativaAPI.Controllers
 {
@@ -24,6 +27,7 @@ namespace CooperativaAPI.Controllers
 
         [HttpGet]
         [Route("")]
+        [JwtAuthorize(Roles = "Administrador")]
         public IHttpActionResult GetAll()
         {
             try
@@ -96,10 +100,14 @@ namespace CooperativaAPI.Controllers
         }
         [HttpGet]
         [Route("socio/{idSocio}/historial/{meses}")]
+        [JwtAuthorize(Roles = "Administrador,Socio")]
         public IHttpActionResult GetHistorialBySocio(int idSocio, int meses)
         {
             try
             {
+                if (User.IsInRole("Socio") && ObtenerClaimEntero("idSocio") != idSocio)
+                    return Content(HttpStatusCode.Forbidden, "No puedes consultar facturas de otro socio.");
+
                 if (meses <= 0)
                     meses = 6;
 
@@ -169,10 +177,14 @@ namespace CooperativaAPI.Controllers
         }
         [HttpGet]
         [Route("socio/{idSocio}")]
+        [JwtAuthorize(Roles = "Administrador,Socio")]
         public IHttpActionResult GetBySocio(int idSocio)
         {
             try
             {
+                if (User.IsInRole("Socio") && ObtenerClaimEntero("idSocio") != idSocio)
+                    return Content(HttpStatusCode.Forbidden, "No puedes consultar facturas de otro socio.");
+
                 var facturas = (
                     from f in db.Factura
                     join s in db.Socio on f.idSocio equals s.idSocio
@@ -242,6 +254,7 @@ namespace CooperativaAPI.Controllers
 
         [HttpGet]
         [Route("impagas")]
+        [JwtAuthorize(Roles = "Administrador")]
         public IHttpActionResult GetImpagas()
         {
             try
@@ -315,6 +328,7 @@ namespace CooperativaAPI.Controllers
 
         [HttpPost]
         [Route("")]
+        [JwtAuthorize(Roles = "Administrador")]
         public IHttpActionResult Crear([FromBody] FacturaCreateRequest request)
         {
             if (request == null)
@@ -334,13 +348,23 @@ namespace CooperativaAPI.Controllers
                 if (servicio == null)
                     return BadRequest("Servicio no encontrado.");
 
+                var fechaEmision = (request.FechaEmision ?? DateTime.Now).Date;
+                var validacion = ValidarDatosFactura(
+                    request.idSocio,
+                    request.idServicio,
+                    request.MontoTotal,
+                    fechaEmision,
+                    request.FechaCaducidad,
+                    request.LinkPago);
+                if (validacion != null) return BadRequest(validacion);
+
                 var factura = new Factura
                 {
                     idSocio = request.idSocio,
                     idEmpleado = request.idEmpleado,
                     idServicio = request.idServicio,
                     MontoTotal = request.MontoTotal,
-                    FechaEmision = request.FechaEmision ?? DateTime.Now,
+                    FechaEmision = fechaEmision,
                     FechaCaducidad = request.FechaCaducidad,
                     LinkPago = request.LinkPago,
                     Pagada = false,
@@ -366,6 +390,7 @@ namespace CooperativaAPI.Controllers
 
         [HttpPut]
         [Route("{id}")]
+        [JwtAuthorize(Roles = "Administrador")]
         public IHttpActionResult Editar(int id, [FromBody] FacturaUpdateRequest request)
         {
             if (request == null)
@@ -380,6 +405,15 @@ namespace CooperativaAPI.Controllers
                 var servicio = db.Servicio.Find(request.idServicio);
                 if (servicio == null)
                     return BadRequest("Servicio no encontrado.");
+
+                var validacion = ValidarDatosFactura(
+                    factura.idSocio,
+                    request.idServicio,
+                    request.MontoTotal,
+                    factura.FechaEmision,
+                    request.FechaCaducidad,
+                    request.LinkPago);
+                if (validacion != null) return BadRequest(validacion);
 
                 factura.idServicio = request.idServicio;
                 factura.MontoTotal = request.MontoTotal;
@@ -399,6 +433,7 @@ namespace CooperativaAPI.Controllers
 
         [HttpPut]
         [Route("pagar/{id}")]
+        [JwtAuthorize(Roles = "Administrador")]
         public IHttpActionResult MarcarPago(int id, [FromBody] FacturaPagoRequest request)
         {
             if (request == null)
@@ -410,10 +445,18 @@ namespace CooperativaAPI.Controllers
                 if (factura == null || !factura.Activo)
                     return NotFound();
 
-                factura.Pagada = request.Pagada;
-                factura.FechaPago = request.Pagada
-                    ? (request.FechaPago ?? DateTime.Now)
-                    : (DateTime?)null;
+                if (!request.Pagada)
+                    return Content(HttpStatusCode.Conflict, "Una factura pagada no puede volver a estado pendiente.");
+
+                if (factura.Pagada)
+                    return Ok("La factura ya estaba pagada.");
+
+                var fechaPago = request.FechaPago ?? DateTime.Now;
+                if (fechaPago > DateTime.Now.AddMinutes(5))
+                    return BadRequest("La fecha de pago no puede estar en el futuro.");
+
+                factura.Pagada = true;
+                factura.FechaPago = fechaPago;
 
                 db.SaveChanges();
 
@@ -427,6 +470,7 @@ namespace CooperativaAPI.Controllers
 
         [HttpDelete]
         [Route("{id}")]
+        [JwtAuthorize(Roles = "Administrador")]
         public IHttpActionResult Eliminar(int id)
         {
             try
@@ -434,6 +478,9 @@ namespace CooperativaAPI.Controllers
                 var factura = db.Factura.Find(id);
                 if (factura == null)
                     return NotFound();
+
+                if (factura.Pagada)
+                    return Content(HttpStatusCode.Conflict, "No se puede dar de baja una factura pagada.");
 
                 factura.Activo = false;
                 db.SaveChanges();
@@ -444,6 +491,43 @@ namespace CooperativaAPI.Controllers
             {
                 return BadRequest(ex.Message);
             }
+        }
+
+        private string ValidarDatosFactura(
+            int idSocio,
+            int idServicio,
+            decimal monto,
+            DateTime fechaEmision,
+            DateTime fechaCaducidad,
+            string linkPago)
+        {
+            if (monto <= 0)
+                return "El monto debe ser mayor a cero.";
+
+            if (fechaCaducidad.Date < fechaEmision.Date)
+                return "La fecha de vencimiento no puede ser anterior a la fecha de emision.";
+
+            if (!string.IsNullOrWhiteSpace(linkPago))
+            {
+                Uri uri;
+                if (!Uri.TryCreate(linkPago.Trim(), UriKind.Absolute, out uri) ||
+                    (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+                    return "El link de pago debe ser una URL http o https valida.";
+            }
+
+            var servicioAsignado = db.ServicioSocio.Any(ss =>
+                ss.idSocio == idSocio &&
+                ss.idServicio == idServicio &&
+                ss.Activo == true);
+
+            return servicioAsignado ? null : "El servicio no esta activo para el socio seleccionado.";
+        }
+
+        private int? ObtenerClaimEntero(string tipo)
+        {
+            var identity = User?.Identity as ClaimsIdentity;
+            int value;
+            return int.TryParse(identity?.FindFirst(tipo)?.Value, out value) ? value : (int?)null;
         }
     }
 }

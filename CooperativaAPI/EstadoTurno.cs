@@ -17,13 +17,13 @@ namespace CooperativaAPI
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Usage", "CA2214:DoNotCallOverridableMethodsInConstructors")]
         public EstadoTurno()
         {
-            this.Turno = new HashSet<Turno>();
+            this.Turnos = new HashSet<Turnos>();
         }
     
-        public int idEstadoTurno { get; set; }
-        public string NombreEstado { get; set; }
+        public int IdEstadoTurno { get; set; }
+        public string Nombre { get; set; }
     
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Usage", "CA2227:CollectionPropertiesShouldBeReadOnly")]
-        public virtual ICollection<Turno> Turno { get; set; }
+        public virtual ICollection<Turnos> Turnos { get; set; }
     }
 }

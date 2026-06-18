@@ -20,9 +20,9 @@ namespace CooperativaAPI
             this.Reclamo = new HashSet<Reclamo>();
             this.ServicioSocio = new HashSet<ServicioSocio>();
             this.UsuarioSistema2 = new HashSet<UsuarioSistema>();
-            this.Turno = new HashSet<Turno>();
             this.SolicitudServicio = new HashSet<SolicitudServicio>();
             this.Factura = new HashSet<Factura>();
+            this.Turnos = new HashSet<Turnos>();
         }
     
         public int idSocio { get; set; }
@@ -38,10 +38,10 @@ namespace CooperativaAPI
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Usage", "CA2227:CollectionPropertiesShouldBeReadOnly")]
         public virtual ICollection<UsuarioSistema> UsuarioSistema2 { get; set; }
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Usage", "CA2227:CollectionPropertiesShouldBeReadOnly")]
-        public virtual ICollection<Turno> Turno { get; set; }
-        [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Usage", "CA2227:CollectionPropertiesShouldBeReadOnly")]
         public virtual ICollection<SolicitudServicio> SolicitudServicio { get; set; }
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Usage", "CA2227:CollectionPropertiesShouldBeReadOnly")]
         public virtual ICollection<Factura> Factura { get; set; }
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Usage", "CA2227:CollectionPropertiesShouldBeReadOnly")]
+        public virtual ICollection<Turnos> Turnos { get; set; }
     }
 }

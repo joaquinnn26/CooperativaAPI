@@ -14,6 +14,12 @@ namespace CooperativaAPI
     
     public partial class Medicion
     {
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Usage", "CA2214:DoNotCallOverridableMethodsInConstructors")]
+        public Medicion()
+        {
+            this.RutaMedicionDetalle = new HashSet<RutaMedicionDetalle>();
+        }
+    
         public int idMedicion { get; set; }
         public int idServicioSocio { get; set; }
         public int idEmpleado { get; set; }
@@ -31,5 +37,7 @@ namespace CooperativaAPI
         public virtual ServicioSocio ServicioSocio { get; set; }
         public virtual TipoLectura TipoLectura { get; set; }
         public virtual Medidor Medidor { get; set; }
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Usage", "CA2227:CollectionPropertiesShouldBeReadOnly")]
+        public virtual ICollection<RutaMedicionDetalle> RutaMedicionDetalle { get; set; }
     }
 }

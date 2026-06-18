@@ -2,6 +2,8 @@
 using System.Linq;
 using System.Web.Http;
 using CooperativaAPI.Data;
+using CooperativaAPI.Filters;
+using System.Security.Claims;
 
 namespace CooperativaAPI.Controllers
 {
@@ -25,6 +27,7 @@ namespace CooperativaAPI.Controllers
 
         [HttpGet]
         [Route("")]
+        [JwtAuthorize(Roles = "Administrador,Empleado")]
         public IHttpActionResult GetAll()
         {
             try
@@ -64,10 +67,14 @@ namespace CooperativaAPI.Controllers
 
         [HttpGet]
         [Route("socio/{idSocio:int}")]
+        [JwtAuthorize(Roles = "Administrador,Socio")]
         public IHttpActionResult GetBySocio(int idSocio)
         {
             try
             {
+                if (User.IsInRole("Socio") && ObtenerClaimEntero("idSocio") != idSocio)
+                    return Content(System.Net.HttpStatusCode.Forbidden, "No puedes consultar solicitudes de otro socio.");
+
                 var solicitudes = db.SolicitudServicio
                     .Where(ss => ss.idSocio == idSocio)
                     .Select(ss => new
@@ -104,12 +111,30 @@ namespace CooperativaAPI.Controllers
 
         [HttpPost]
         [Route("")]
+        [JwtAuthorize(Roles = "Socio")]
         public IHttpActionResult Crear([FromBody] SolicitudServicio solicitud)
         {
             try
             {
                 if (solicitud == null)
                     return BadRequest("Datos inválidos.");
+
+                var idSocioActual = ObtenerClaimEntero("idSocio");
+                if (!idSocioActual.HasValue) return Unauthorized();
+                solicitud.idSocio = idSocioActual.Value;
+
+                if (!db.Socio.Any(s => s.idSocio == solicitud.idSocio && s.Activo == true))
+                    return BadRequest("El socio no existe o esta inactivo.");
+
+                if (!db.Servicio.Any(s => s.idServicio == solicitud.idServicio))
+                    return BadRequest("El servicio no existe.");
+
+                var solicitudActiva = db.SolicitudServicio.Any(s =>
+                    s.idSocio == solicitud.idSocio &&
+                    s.idServicio == solicitud.idServicio &&
+                    s.FechaResolucion == null);
+                if (solicitudActiva)
+                    return BadRequest("Ya existe una solicitud activa para este servicio.");
 
                 solicitud.FechaSolicitud = DateTime.Now;
 
@@ -138,6 +163,7 @@ namespace CooperativaAPI.Controllers
 
         [HttpPut]
         [Route("aprobar/{id}")]
+        [JwtAuthorize(Roles = "Administrador")]
         public IHttpActionResult Aprobar(int id)
         {
             using (var trans = db.Database.BeginTransaction())
@@ -147,6 +173,10 @@ namespace CooperativaAPI.Controllers
                     var solicitud = db.SolicitudServicio.Find(id);
                     if (solicitud == null)
                         return NotFound();
+
+                    var estadoActual = solicitud.EstadoSolicitudServicio?.NombreEstado;
+                    if (estadoActual != "Pendiente" && estadoActual != "En Revision")
+                        return BadRequest("Solo se pueden aprobar solicitudes pendientes o en revision.");
 
                     var estado = db.EstadoSolicitudServicio
                         .FirstOrDefault(e => e.NombreEstado == "Aprobada");
@@ -237,6 +267,7 @@ namespace CooperativaAPI.Controllers
 
         [HttpPut]
         [Route("rechazar/{id}")]
+        [JwtAuthorize(Roles = "Administrador")]
         public IHttpActionResult Rechazar(int id, [FromBody] dynamic data)
         {
             try
@@ -245,6 +276,16 @@ namespace CooperativaAPI.Controllers
                 if (solicitud == null)
                     return NotFound();
 
+                var estadoActual = solicitud.EstadoSolicitudServicio?.NombreEstado;
+                if (estadoActual != "Pendiente" && estadoActual != "En Revision")
+                    return BadRequest("Solo se pueden rechazar solicitudes pendientes o en revision.");
+
+                var motivo = Convert.ToString(data?.motivo)?.Trim();
+                if (string.IsNullOrWhiteSpace(motivo))
+                    return BadRequest("El motivo de rechazo es obligatorio.");
+                if (motivo.Length > 500)
+                    return BadRequest("El motivo de rechazo no puede superar 500 caracteres.");
+
                 var estado = db.EstadoSolicitudServicio
                     .FirstOrDefault(e => e.NombreEstado == "Rechazada");
 
@@ -252,7 +293,7 @@ namespace CooperativaAPI.Controllers
                     return BadRequest("No existe el estado Rechazada.");
 
                 solicitud.idEstadoSolicitud = estado.idEstadoSolicitud;
-                solicitud.MotivoRechazo = data?.motivo;
+                solicitud.MotivoRechazo = motivo;
                 solicitud.FechaResolucion = DateTime.Now;
 
                 db.SaveChanges();
@@ -263,6 +304,13 @@ namespace CooperativaAPI.Controllers
             {
                 return BadRequest(ex.Message);
             }
+        }
+
+        private int? ObtenerClaimEntero(string tipo)
+        {
+            var identity = User?.Identity as ClaimsIdentity;
+            int value;
+            return int.TryParse(identity?.FindFirst(tipo)?.Value, out value) ? value : (int?)null;
         }
     }
 }

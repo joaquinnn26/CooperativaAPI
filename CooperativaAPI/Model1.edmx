@@ -62,10 +62,10 @@
         </EntityType>
         <EntityType Name="EstadoTurno">
           <Key>
-            <PropertyRef Name="idEstadoTurno" />
+            <PropertyRef Name="IdEstadoTurno" />
           </Key>
-          <Property Name="idEstadoTurno" Type="int" StoreGeneratedPattern="Identity" Nullable="false" />
-          <Property Name="NombreEstado" Type="varchar" MaxLength="50" Nullable="false" />
+          <Property Name="IdEstadoTurno" Type="int" Nullable="false" />
+          <Property Name="Nombre" Type="nvarchar" MaxLength="40" Nullable="false" />
         </EntityType>
         <EntityType Name="Factura">
           <Key>
@@ -167,6 +167,39 @@
           <Property Name="idRol" Type="int" StoreGeneratedPattern="Identity" Nullable="false" />
           <Property Name="NombreRol" Type="varchar" MaxLength="50" Nullable="false" />
         </EntityType>
+        <EntityType Name="RutaMedicion">
+          <Key>
+            <PropertyRef Name="idRutaMedicion" />
+          </Key>
+          <Property Name="idRutaMedicion" Type="int" StoreGeneratedPattern="Identity" Nullable="false" />
+          <Property Name="idEmpleado" Type="int" Nullable="false" />
+          <Property Name="Nombre" Type="nvarchar" MaxLength="120" Nullable="false" />
+          <Property Name="Fecha" Type="date" Nullable="false" />
+          <Property Name="Estado" Type="nvarchar" MaxLength="20" Nullable="false" />
+          <Property Name="FechaCreacion" Type="datetime2" Precision="7" Nullable="false" />
+          <Property Name="FechaInicio" Type="datetime2" Precision="7" />
+          <Property Name="FechaFinalizacion" Type="datetime2" Precision="7" />
+          <Property Name="FirmaDigital" Type="varbinary(max)" />
+          <Property Name="FirmaMimeType" Type="nvarchar" MaxLength="50" />
+          <Property Name="Observacion" Type="nvarchar" MaxLength="500" />
+        </EntityType>
+        <EntityType Name="RutaMedicionDetalle">
+          <Key>
+            <PropertyRef Name="idRutaMedicionDetalle" />
+          </Key>
+          <Property Name="idRutaMedicionDetalle" Type="int" StoreGeneratedPattern="Identity" Nullable="false" />
+          <Property Name="idRutaMedicion" Type="int" Nullable="false" />
+          <Property Name="idMedidor" Type="int" Nullable="false" />
+          <Property Name="Orden" Type="int" Nullable="false" />
+          <Property Name="Estado" Type="nvarchar" MaxLength="30" Nullable="false" />
+          <Property Name="idMedicion" Type="int" />
+          <Property Name="LecturaInformada" Type="decimal" Precision="18" Scale="2" />
+          <Property Name="FechaHoraLectura" Type="datetime2" Precision="7" />
+          <Property Name="Observacion" Type="nvarchar" MaxLength="500" />
+          <Property Name="Latitud" Type="decimal" Precision="10" Scale="7" />
+          <Property Name="Longitud" Type="decimal" Precision="10" Scale="7" />
+          <Property Name="FotoMedidorUrl" Type="nvarchar" MaxLength="500" />
+        </EntityType>
         <EntityType Name="Servicio">
           <Key>
             <PropertyRef Name="idServicio" />
@@ -251,17 +284,23 @@
           <Property Name="NombreTipo" Type="varchar" MaxLength="50" Nullable="false" />
           <Property Name="Activo" Type="bit" />
         </EntityType>
-        <EntityType Name="Turno">
+        <EntityType Name="Turnos">
           <Key>
-            <PropertyRef Name="idTurno" />
+            <PropertyRef Name="IdTurno" />
           </Key>
-          <Property Name="idTurno" Type="int" StoreGeneratedPattern="Identity" Nullable="false" />
-          <Property Name="idSocio" Type="int" Nullable="false" />
-          <Property Name="idEstadoTurno" Type="int" Nullable="false" />
+          <Property Name="IdTurno" Type="int" StoreGeneratedPattern="Identity" Nullable="false" />
+          <Property Name="IdSocio" Type="int" Nullable="false" />
+          <Property Name="SocioNombre" Type="nvarchar" MaxLength="160" />
+          <Property Name="SocioDocumento" Type="nvarchar" MaxLength="50" />
           <Property Name="Fecha" Type="date" Nullable="false" />
-          <Property Name="Hora" Type="time" Precision="7" Nullable="false" />
-          <Property Name="Motivo" Type="varchar" MaxLength="255" />
-          <Property Name="Observaciones" Type="varchar" MaxLength="255" />
+          <Property Name="Hora" Type="time" Precision="0" Nullable="false" />
+          <Property Name="Motivo" Type="nvarchar" MaxLength="500" Nullable="false" />
+          <Property Name="IdEstadoTurno" Type="int" Nullable="false" />
+          <Property Name="FechaPropuesta" Type="date" />
+          <Property Name="HoraPropuesta" Type="time" Precision="0" />
+          <Property Name="ObservacionAdmin" Type="nvarchar" MaxLength="500" />
+          <Property Name="FechaCreacion" Type="datetime2" Precision="0" Nullable="false" />
+          <Property Name="FechaActualizacion" Type="datetime2" Precision="0" />
         </EntityType>
         <EntityType Name="UsuarioSistema">
           <Key>
@@ -598,6 +637,54 @@
             </Dependent>
           </ReferentialConstraint>
         </Association>
+        <Association Name="FK_RutaMedicion_Empleado">
+          <End Role="Empleado" Type="Self.Empleado" Multiplicity="1" />
+          <End Role="RutaMedicion" Type="Self.RutaMedicion" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="Empleado">
+              <PropertyRef Name="idEmpleado" />
+            </Principal>
+            <Dependent Role="RutaMedicion">
+              <PropertyRef Name="idEmpleado" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_RutaMedicionDetalle_Medicion">
+          <End Role="Medicion" Type="Self.Medicion" Multiplicity="0..1" />
+          <End Role="RutaMedicionDetalle" Type="Self.RutaMedicionDetalle" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="Medicion">
+              <PropertyRef Name="idMedicion" />
+            </Principal>
+            <Dependent Role="RutaMedicionDetalle">
+              <PropertyRef Name="idMedicion" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_RutaMedicionDetalle_Medidor">
+          <End Role="Medidor" Type="Self.Medidor" Multiplicity="1" />
+          <End Role="RutaMedicionDetalle" Type="Self.RutaMedicionDetalle" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="Medidor">
+              <PropertyRef Name="idMedidor" />
+            </Principal>
+            <Dependent Role="RutaMedicionDetalle">
+              <PropertyRef Name="idMedidor" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_RutaMedicionDetalle_Ruta">
+          <End Role="RutaMedicion" Type="Self.RutaMedicion" Multiplicity="1" />
+          <End Role="RutaMedicionDetalle" Type="Self.RutaMedicionDetalle" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="RutaMedicion">
+              <PropertyRef Name="idRutaMedicion" />
+            </Principal>
+            <Dependent Role="RutaMedicionDetalle">
+              <PropertyRef Name="idRutaMedicion" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
         <Association Name="FK_SolicitudServicio_Empleado">
           <End Role="Empleado" Type="Self.Empleado" Multiplicity="0..1" />
           <End Role="SolicitudServicio" Type="Self.SolicitudServicio" Multiplicity="*" />
@@ -646,27 +733,27 @@
             </Dependent>
           </ReferentialConstraint>
         </Association>
-        <Association Name="FK_Turno_Estado">
+        <Association Name="FK_Turnos_EstadoTurno">
           <End Role="EstadoTurno" Type="Self.EstadoTurno" Multiplicity="1" />
-          <End Role="Turno" Type="Self.Turno" Multiplicity="*" />
+          <End Role="Turnos" Type="Self.Turnos" Multiplicity="*" />
           <ReferentialConstraint>
             <Principal Role="EstadoTurno">
-              <PropertyRef Name="idEstadoTurno" />
+              <PropertyRef Name="IdEstadoTurno" />
             </Principal>
-            <Dependent Role="Turno">
-              <PropertyRef Name="idEstadoTurno" />
+            <Dependent Role="Turnos">
+              <PropertyRef Name="IdEstadoTurno" />
             </Dependent>
           </ReferentialConstraint>
         </Association>
-        <Association Name="FK_Turno_Socio">
+        <Association Name="FK_Turnos_Socio">
           <End Role="Socio" Type="Self.Socio" Multiplicity="1" />
-          <End Role="Turno" Type="Self.Turno" Multiplicity="*" />
+          <End Role="Turnos" Type="Self.Turnos" Multiplicity="*" />
           <ReferentialConstraint>
             <Principal Role="Socio">
               <PropertyRef Name="idSocio" />
             </Principal>
-            <Dependent Role="Turno">
-              <PropertyRef Name="idSocio" />
+            <Dependent Role="Turnos">
+              <PropertyRef Name="IdSocio" />
             </Dependent>
           </ReferentialConstraint>
         </Association>
@@ -743,6 +830,8 @@
           <EntitySet Name="Reclamo" EntityType="Self.Reclamo" Schema="dbo" store:Type="Tables" />
           <EntitySet Name="RequisitoServicio" EntityType="Self.RequisitoServicio" Schema="dbo" store:Type="Tables" />
           <EntitySet Name="Rol" EntityType="Self.Rol" Schema="dbo" store:Type="Tables" />
+          <EntitySet Name="RutaMedicion" EntityType="Self.RutaMedicion" Schema="dbo" store:Type="Tables" />
+          <EntitySet Name="RutaMedicionDetalle" EntityType="Self.RutaMedicionDetalle" Schema="dbo" store:Type="Tables" />
           <EntitySet Name="Servicio" EntityType="Self.Servicio" Schema="dbo" store:Type="Tables" />
           <EntitySet Name="ServicioSocio" EntityType="Self.ServicioSocio" Schema="dbo" store:Type="Tables" />
           <EntitySet Name="Socio" EntityType="Self.Socio" Schema="dbo" store:Type="Tables" />
@@ -752,7 +841,7 @@
           <EntitySet Name="TipoMedidor" EntityType="Self.TipoMedidor" Schema="dbo" store:Type="Tables" />
           <EntitySet Name="TipoReclamo" EntityType="Self.TipoReclamo" Schema="dbo" store:Type="Tables" />
           <EntitySet Name="TipoTarifa" EntityType="Self.TipoTarifa" Schema="dbo" store:Type="Tables" />
-          <EntitySet Name="Turno" EntityType="Self.Turno" Schema="dbo" store:Type="Tables" />
+          <EntitySet Name="Turnos" EntityType="Self.Turnos" Schema="dbo" store:Type="Tables" />
           <EntitySet Name="UsuarioSistema" EntityType="Self.UsuarioSistema" Schema="dbo" store:Type="Tables" />
           <AssociationSet Name="FK__Empleado__idCarg__403A8C7D" Association="Self.FK__Empleado__idCarg__403A8C7D">
             <End Role="Cargo" EntitySet="Cargo" />
@@ -862,6 +951,22 @@
             <End Role="Servicio" EntitySet="Servicio" />
             <End Role="RequisitoServicio" EntitySet="RequisitoServicio" />
           </AssociationSet>
+          <AssociationSet Name="FK_RutaMedicion_Empleado" Association="Self.FK_RutaMedicion_Empleado">
+            <End Role="Empleado" EntitySet="Empleado" />
+            <End Role="RutaMedicion" EntitySet="RutaMedicion" />
+          </AssociationSet>
+          <AssociationSet Name="FK_RutaMedicionDetalle_Medicion" Association="Self.FK_RutaMedicionDetalle_Medicion">
+            <End Role="Medicion" EntitySet="Medicion" />
+            <End Role="RutaMedicionDetalle" EntitySet="RutaMedicionDetalle" />
+          </AssociationSet>
+          <AssociationSet Name="FK_RutaMedicionDetalle_Medidor" Association="Self.FK_RutaMedicionDetalle_Medidor">
+            <End Role="Medidor" EntitySet="Medidor" />
+            <End Role="RutaMedicionDetalle" EntitySet="RutaMedicionDetalle" />
+          </AssociationSet>
+          <AssociationSet Name="FK_RutaMedicionDetalle_Ruta" Association="Self.FK_RutaMedicionDetalle_Ruta">
+            <End Role="RutaMedicion" EntitySet="RutaMedicion" />
+            <End Role="RutaMedicionDetalle" EntitySet="RutaMedicionDetalle" />
+          </AssociationSet>
           <AssociationSet Name="FK_SolicitudServicio_Empleado" Association="Self.FK_SolicitudServicio_Empleado">
             <End Role="Empleado" EntitySet="Empleado" />
             <End Role="SolicitudServicio" EntitySet="SolicitudServicio" />
@@ -878,13 +983,13 @@
             <End Role="Socio" EntitySet="Socio" />
             <End Role="SolicitudServicio" EntitySet="SolicitudServicio" />
           </AssociationSet>
-          <AssociationSet Name="FK_Turno_Estado" Association="Self.FK_Turno_Estado">
+          <AssociationSet Name="FK_Turnos_EstadoTurno" Association="Self.FK_Turnos_EstadoTurno">
             <End Role="EstadoTurno" EntitySet="EstadoTurno" />
-            <End Role="Turno" EntitySet="Turno" />
+            <End Role="Turnos" EntitySet="Turnos" />
           </AssociationSet>
-          <AssociationSet Name="FK_Turno_Socio" Association="Self.FK_Turno_Socio">
+          <AssociationSet Name="FK_Turnos_Socio" Association="Self.FK_Turnos_Socio">
             <End Role="Socio" EntitySet="Socio" />
-            <End Role="Turno" EntitySet="Turno" />
+            <End Role="Turnos" EntitySet="Turnos" />
           </AssociationSet>
           <AssociationSet Name="FK_UsuarioSistema_Socio" Association="Self.FK_UsuarioSistema_Socio">
             <End Role="Socio" EntitySet="Socio" />
@@ -933,6 +1038,7 @@
           <NavigationProperty Name="HistorialEstadoSolicitud" Relationship="CooperativaModel.FK_HistorialSolicitud_Empleado" FromRole="Empleado" ToRole="HistorialEstadoSolicitud" />
           <NavigationProperty Name="SolicitudServicio" Relationship="CooperativaModel.FK_SolicitudServicio_Empleado" FromRole="Empleado" ToRole="SolicitudServicio" />
           <NavigationProperty Name="Factura" Relationship="CooperativaModel.FK_Factura_Empleado" FromRole="Empleado" ToRole="Factura" />
+          <NavigationProperty Name="RutaMedicion" Relationship="CooperativaModel.FK_RutaMedicion_Empleado" FromRole="Empleado" ToRole="RutaMedicion" />
         </EntityType>
         <EntityType Name="EstadoReclamo">
           <Key>
@@ -1024,9 +1130,9 @@
           <NavigationProperty Name="Reclamo" Relationship="Self.FK__Reclamo__idSocio__5535A963" FromRole="Socio" ToRole="Reclamo" />
           <NavigationProperty Name="ServicioSocio" Relationship="Self.FK__ServicioS__idSoc__4D94879B" FromRole="Socio" ToRole="ServicioSocio" />
           <NavigationProperty Name="UsuarioSistema2" Relationship="CooperativaModel.FK_UsuarioSistema_Socios" FromRole="Socio" ToRole="UsuarioSistema" />
-          <NavigationProperty Name="Turno" Relationship="CooperativaModel.FK_Turno_Socio" FromRole="Socio" ToRole="Turno" />
           <NavigationProperty Name="SolicitudServicio" Relationship="CooperativaModel.FK_SolicitudServicio_Socio" FromRole="Socio" ToRole="SolicitudServicio" />
           <NavigationProperty Name="Factura" Relationship="CooperativaModel.FK_Factura_Socio" FromRole="Socio" ToRole="Factura" />
+          <NavigationProperty Name="Turnos" Relationship="CooperativaModel.FK_Turnos_Socio" FromRole="Socio" ToRole="Turnos" />
         </EntityType>
         <EntityType Name="TipoReclamo">
           <Key>
@@ -1284,17 +1390,11 @@
             <End Role="Socio" EntitySet="Socio" />
             <End Role="UsuarioSistema" EntitySet="UsuarioSistema" />
           </AssociationSet>
-          <EntitySet Name="EstadoTurno" EntityType="CooperativaModel.EstadoTurno" />
           <EntitySet Name="Medicion" EntityType="CooperativaModel.Medicion" />
           <EntitySet Name="TipoLectura" EntityType="CooperativaModel.TipoLectura" />
-          <EntitySet Name="Turno" EntityType="CooperativaModel.Turno" />
           <AssociationSet Name="FK_Medicion_Empleado" Association="CooperativaModel.FK_Medicion_Empleado">
             <End Role="Empleado" EntitySet="Empleado" />
             <End Role="Medicion" EntitySet="Medicion" />
-          </AssociationSet>
-          <AssociationSet Name="FK_Turno_Estado" Association="CooperativaModel.FK_Turno_Estado">
-            <End Role="EstadoTurno" EntitySet="EstadoTurno" />
-            <End Role="Turno" EntitySet="Turno" />
           </AssociationSet>
           <AssociationSet Name="FK_Medicion_ServicioSocio" Association="CooperativaModel.FK_Medicion_ServicioSocio">
             <End Role="ServicioSocio" EntitySet="ServicioSocio" />
@@ -1303,10 +1403,6 @@
           <AssociationSet Name="FK_Medicion_TipoLectura" Association="CooperativaModel.FK_Medicion_TipoLectura">
             <End Role="TipoLectura" EntitySet="TipoLectura" />
             <End Role="Medicion" EntitySet="Medicion" />
-          </AssociationSet>
-          <AssociationSet Name="FK_Turno_Socio" Association="CooperativaModel.FK_Turno_Socio">
-            <End Role="Socio" EntitySet="Socio" />
-            <End Role="Turno" EntitySet="Turno" />
           </AssociationSet>
           <EntitySet Name="TipoMedidor" EntityType="CooperativaModel.TipoMedidor" />
           <EntitySet Name="Medidor" EntityType="CooperativaModel.Medidor" />
@@ -1380,6 +1476,34 @@
             <End Role="Socio" EntitySet="Socio" />
             <End Role="Factura" EntitySet="Factura" />
           </AssociationSet>
+          <EntitySet Name="EstadoTurno" EntityType="CooperativaModel.EstadoTurno" />
+          <EntitySet Name="Turnos" EntityType="CooperativaModel.Turnos" />
+          <AssociationSet Name="FK_Turnos_EstadoTurno" Association="CooperativaModel.FK_Turnos_EstadoTurno">
+            <End Role="EstadoTurno" EntitySet="EstadoTurno" />
+            <End Role="Turnos" EntitySet="Turnos" />
+          </AssociationSet>
+          <AssociationSet Name="FK_Turnos_Socio" Association="CooperativaModel.FK_Turnos_Socio">
+            <End Role="Socio" EntitySet="Socio" />
+            <End Role="Turnos" EntitySet="Turnos" />
+          </AssociationSet>
+          <EntitySet Name="RutaMedicion" EntityType="CooperativaModel.RutaMedicion" />
+          <EntitySet Name="RutaMedicionDetalle" EntityType="CooperativaModel.RutaMedicionDetalle" />
+          <AssociationSet Name="FK_RutaMedicion_Empleado" Association="CooperativaModel.FK_RutaMedicion_Empleado">
+            <End Role="Empleado" EntitySet="Empleado" />
+            <End Role="RutaMedicion" EntitySet="RutaMedicion" />
+          </AssociationSet>
+          <AssociationSet Name="FK_RutaMedicionDetalle_Medicion" Association="CooperativaModel.FK_RutaMedicionDetalle_Medicion">
+            <End Role="Medicion" EntitySet="Medicion" />
+            <End Role="RutaMedicionDetalle" EntitySet="RutaMedicionDetalle" />
+          </AssociationSet>
+          <AssociationSet Name="FK_RutaMedicionDetalle_Medidor" Association="CooperativaModel.FK_RutaMedicionDetalle_Medidor">
+            <End Role="Medidor" EntitySet="Medidor" />
+            <End Role="RutaMedicionDetalle" EntitySet="RutaMedicionDetalle" />
+          </AssociationSet>
+          <AssociationSet Name="FK_RutaMedicionDetalle_Ruta" Association="CooperativaModel.FK_RutaMedicionDetalle_Ruta">
+            <End Role="RutaMedicion" EntitySet="RutaMedicion" />
+            <End Role="RutaMedicionDetalle" EntitySet="RutaMedicionDetalle" />
+          </AssociationSet>
         </EntityContainer>
         <EntityType Name="sysdiagrams">
           <Key>
@@ -1416,14 +1540,6 @@
             </Dependent>
           </ReferentialConstraint>
         </Association>
-        <EntityType Name="EstadoTurno">
-          <Key>
-            <PropertyRef Name="idEstadoTurno" />
-          </Key>
-          <Property Name="idEstadoTurno" Type="Int32" Nullable="false" annotation:StoreGeneratedPattern="Identity" />
-          <Property Name="NombreEstado" Type="String" Nullable="false" MaxLength="50" FixedLength="false" Unicode="false" />
-          <NavigationProperty Name="Turno" Relationship="CooperativaModel.FK_Turno_Estado" FromRole="EstadoTurno" ToRole="Turno" />
-        </EntityType>
         <EntityType Name="Medicion">
           <Key>
             <PropertyRef Name="idMedicion" />
@@ -1444,6 +1560,7 @@
           <NavigationProperty Name="ServicioSocio" Relationship="CooperativaModel.FK_Medicion_ServicioSocio" FromRole="Medicion" ToRole="ServicioSocio" />
           <NavigationProperty Name="TipoLectura" Relationship="CooperativaModel.FK_Medicion_TipoLectura" FromRole="Medicion" ToRole="TipoLectura" />
           <NavigationProperty Name="Medidor" Relationship="CooperativaModel.FK_Medicion_Medidor" FromRole="Medicion" ToRole="Medidor" />
+          <NavigationProperty Name="RutaMedicionDetalle" Relationship="CooperativaModel.FK_RutaMedicionDetalle_Medicion" FromRole="Medicion" ToRole="RutaMedicionDetalle" />
         </EntityType>
         <EntityType Name="TipoLectura">
           <Key>
@@ -1452,20 +1569,6 @@
           <Property Name="idTipoLectura" Type="Int32" Nullable="false" annotation:StoreGeneratedPattern="Identity" />
           <Property Name="Nombre" Type="String" Nullable="false" MaxLength="50" FixedLength="false" Unicode="false" />
           <NavigationProperty Name="Medicion" Relationship="CooperativaModel.FK_Medicion_TipoLectura" FromRole="TipoLectura" ToRole="Medicion" />
-        </EntityType>
-        <EntityType Name="Turno">
-          <Key>
-            <PropertyRef Name="idTurno" />
-          </Key>
-          <Property Name="idTurno" Type="Int32" Nullable="false" annotation:StoreGeneratedPattern="Identity" />
-          <Property Name="idSocio" Type="Int32" Nullable="false" />
-          <Property Name="idEstadoTurno" Type="Int32" Nullable="false" />
-          <Property Name="Fecha" Type="DateTime" Nullable="false" Precision="0" />
-          <Property Name="Hora" Type="Time" Nullable="false" Precision="7" />
-          <Property Name="Motivo" Type="String" MaxLength="255" FixedLength="false" Unicode="false" />
-          <Property Name="Observaciones" Type="String" MaxLength="255" FixedLength="false" Unicode="false" />
-          <NavigationProperty Name="EstadoTurno" Relationship="CooperativaModel.FK_Turno_Estado" FromRole="Turno" ToRole="EstadoTurno" />
-          <NavigationProperty Name="Socio" Relationship="CooperativaModel.FK_Turno_Socio" FromRole="Turno" ToRole="Socio" />
         </EntityType>
         <Association Name="FK_Medicion_Empleado">
           <End Type="CooperativaModel.Empleado" Role="Empleado" Multiplicity="1" />
@@ -1476,18 +1579,6 @@
             </Principal>
             <Dependent Role="Medicion">
               <PropertyRef Name="idEmpleado" />
-            </Dependent>
-          </ReferentialConstraint>
-        </Association>
-        <Association Name="FK_Turno_Estado">
-          <End Type="CooperativaModel.EstadoTurno" Role="EstadoTurno" Multiplicity="1" />
-          <End Type="CooperativaModel.Turno" Role="Turno" Multiplicity="*" />
-          <ReferentialConstraint>
-            <Principal Role="EstadoTurno">
-              <PropertyRef Name="idEstadoTurno" />
-            </Principal>
-            <Dependent Role="Turno">
-              <PropertyRef Name="idEstadoTurno" />
             </Dependent>
           </ReferentialConstraint>
         </Association>
@@ -1515,18 +1606,6 @@
             </Dependent>
           </ReferentialConstraint>
         </Association>
-        <Association Name="FK_Turno_Socio">
-          <End Type="CooperativaModel.Socio" Role="Socio" Multiplicity="1" />
-          <End Type="CooperativaModel.Turno" Role="Turno" Multiplicity="*" />
-          <ReferentialConstraint>
-            <Principal Role="Socio">
-              <PropertyRef Name="idSocio" />
-            </Principal>
-            <Dependent Role="Turno">
-              <PropertyRef Name="idSocio" />
-            </Dependent>
-          </ReferentialConstraint>
-        </Association>
         <EntityType Name="TipoMedidor">
           <Key>
             <PropertyRef Name="idTipoMedidor" />
@@ -1548,6 +1627,7 @@
           <NavigationProperty Name="Medicion" Relationship="CooperativaModel.FK_Medicion_Medidor" FromRole="Medidor" ToRole="Medicion" />
           <NavigationProperty Name="ServicioSocio" Relationship="CooperativaModel.FK_Medidor_ServicioSocio" FromRole="Medidor" ToRole="ServicioSocio" />
           <NavigationProperty Name="TipoMedidor" Relationship="CooperativaModel.FK_Medidor_TipoMedidor" FromRole="Medidor" ToRole="TipoMedidor" />
+          <NavigationProperty Name="RutaMedicionDetalle" Relationship="CooperativaModel.FK_RutaMedicionDetalle_Medidor" FromRole="Medidor" ToRole="RutaMedicionDetalle" />
         </EntityType>
         <Association Name="FK_Medicion_Medidor">
           <End Type="CooperativaModel.Medidor" Role="Medidor" Multiplicity="1" />
@@ -1833,6 +1913,144 @@
             </Dependent>
           </ReferentialConstraint>
         </Association>
+        <EntityType Name="EstadoTurno">
+          <Key>
+            <PropertyRef Name="IdEstadoTurno" />
+          </Key>
+          <Property Name="IdEstadoTurno" Type="Int32" Nullable="false" />
+          <Property Name="Nombre" Type="String" Nullable="false" MaxLength="40" FixedLength="false" Unicode="true" />
+          <NavigationProperty Name="Turnos" Relationship="CooperativaModel.FK_Turnos_EstadoTurno" FromRole="EstadoTurno" ToRole="Turnos" />
+        </EntityType>
+        <EntityType Name="Turnos">
+          <Key>
+            <PropertyRef Name="IdTurno" />
+          </Key>
+          <Property Name="IdTurno" Type="Int32" Nullable="false" annotation:StoreGeneratedPattern="Identity" />
+          <Property Name="IdSocio" Type="Int32" Nullable="false" />
+          <Property Name="SocioNombre" Type="String" MaxLength="160" FixedLength="false" Unicode="true" />
+          <Property Name="SocioDocumento" Type="String" MaxLength="50" FixedLength="false" Unicode="true" />
+          <Property Name="Fecha" Type="DateTime" Nullable="false" Precision="0" />
+          <Property Name="Hora" Type="Time" Nullable="false" Precision="0" />
+          <Property Name="Motivo" Type="String" Nullable="false" MaxLength="500" FixedLength="false" Unicode="true" />
+          <Property Name="IdEstadoTurno" Type="Int32" Nullable="false" />
+          <Property Name="FechaPropuesta" Type="DateTime" Precision="0" />
+          <Property Name="HoraPropuesta" Type="Time" Precision="0" />
+          <Property Name="ObservacionAdmin" Type="String" MaxLength="500" FixedLength="false" Unicode="true" />
+          <Property Name="FechaCreacion" Type="DateTime" Nullable="false" Precision="0" />
+          <Property Name="FechaActualizacion" Type="DateTime" Precision="0" />
+          <NavigationProperty Name="EstadoTurno" Relationship="CooperativaModel.FK_Turnos_EstadoTurno" FromRole="Turnos" ToRole="EstadoTurno" />
+          <NavigationProperty Name="Socio" Relationship="CooperativaModel.FK_Turnos_Socio" FromRole="Turnos" ToRole="Socio" />
+        </EntityType>
+        <Association Name="FK_Turnos_EstadoTurno">
+          <End Type="CooperativaModel.EstadoTurno" Role="EstadoTurno" Multiplicity="1" />
+          <End Type="CooperativaModel.Turnos" Role="Turnos" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="EstadoTurno">
+              <PropertyRef Name="IdEstadoTurno" />
+            </Principal>
+            <Dependent Role="Turnos">
+              <PropertyRef Name="IdEstadoTurno" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_Turnos_Socio">
+          <End Type="CooperativaModel.Socio" Role="Socio" Multiplicity="1" />
+          <End Type="CooperativaModel.Turnos" Role="Turnos" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="Socio">
+              <PropertyRef Name="idSocio" />
+            </Principal>
+            <Dependent Role="Turnos">
+              <PropertyRef Name="IdSocio" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <EntityType Name="RutaMedicion">
+          <Key>
+            <PropertyRef Name="idRutaMedicion" />
+          </Key>
+          <Property Name="idRutaMedicion" Type="Int32" Nullable="false" annotation:StoreGeneratedPattern="Identity" />
+          <Property Name="idEmpleado" Type="Int32" Nullable="false" />
+          <Property Name="Nombre" Type="String" Nullable="false" MaxLength="120" FixedLength="false" Unicode="true" />
+          <Property Name="Fecha" Type="DateTime" Nullable="false" Precision="0" />
+          <Property Name="Estado" Type="String" Nullable="false" MaxLength="20" FixedLength="false" Unicode="true" />
+          <Property Name="FechaCreacion" Type="DateTime" Nullable="false" Precision="7" />
+          <Property Name="FechaInicio" Type="DateTime" Precision="7" />
+          <Property Name="FechaFinalizacion" Type="DateTime" Precision="7" />
+          <Property Name="FirmaDigital" Type="Binary" MaxLength="Max" FixedLength="false" />
+          <Property Name="FirmaMimeType" Type="String" MaxLength="50" FixedLength="false" Unicode="true" />
+          <Property Name="Observacion" Type="String" MaxLength="500" FixedLength="false" Unicode="true" />
+          <NavigationProperty Name="Empleado" Relationship="CooperativaModel.FK_RutaMedicion_Empleado" FromRole="RutaMedicion" ToRole="Empleado" />
+          <NavigationProperty Name="RutaMedicionDetalle" Relationship="CooperativaModel.FK_RutaMedicionDetalle_Ruta" FromRole="RutaMedicion" ToRole="RutaMedicionDetalle" />
+        </EntityType>
+        <EntityType Name="RutaMedicionDetalle">
+          <Key>
+            <PropertyRef Name="idRutaMedicionDetalle" />
+          </Key>
+          <Property Name="idRutaMedicionDetalle" Type="Int32" Nullable="false" annotation:StoreGeneratedPattern="Identity" />
+          <Property Name="idRutaMedicion" Type="Int32" Nullable="false" />
+          <Property Name="idMedidor" Type="Int32" Nullable="false" />
+          <Property Name="Orden" Type="Int32" Nullable="false" />
+          <Property Name="Estado" Type="String" Nullable="false" MaxLength="30" FixedLength="false" Unicode="true" />
+          <Property Name="idMedicion" Type="Int32" />
+          <Property Name="LecturaInformada" Type="Decimal" Precision="18" Scale="2" />
+          <Property Name="FechaHoraLectura" Type="DateTime" Precision="7" />
+          <Property Name="Observacion" Type="String" MaxLength="500" FixedLength="false" Unicode="true" />
+          <Property Name="Latitud" Type="Decimal" Precision="10" Scale="7" />
+          <Property Name="Longitud" Type="Decimal" Precision="10" Scale="7" />
+          <Property Name="FotoMedidorUrl" Type="String" MaxLength="500" FixedLength="false" Unicode="true" />
+          <NavigationProperty Name="Medicion" Relationship="CooperativaModel.FK_RutaMedicionDetalle_Medicion" FromRole="RutaMedicionDetalle" ToRole="Medicion" />
+          <NavigationProperty Name="Medidor" Relationship="CooperativaModel.FK_RutaMedicionDetalle_Medidor" FromRole="RutaMedicionDetalle" ToRole="Medidor" />
+          <NavigationProperty Name="RutaMedicion" Relationship="CooperativaModel.FK_RutaMedicionDetalle_Ruta" FromRole="RutaMedicionDetalle" ToRole="RutaMedicion" />
+        </EntityType>
+        <Association Name="FK_RutaMedicion_Empleado">
+          <End Type="CooperativaModel.Empleado" Role="Empleado" Multiplicity="1" />
+          <End Type="CooperativaModel.RutaMedicion" Role="RutaMedicion" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="Empleado">
+              <PropertyRef Name="idEmpleado" />
+            </Principal>
+            <Dependent Role="RutaMedicion">
+              <PropertyRef Name="idEmpleado" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_RutaMedicionDetalle_Medicion">
+          <End Type="CooperativaModel.Medicion" Role="Medicion" Multiplicity="0..1" />
+          <End Type="CooperativaModel.RutaMedicionDetalle" Role="RutaMedicionDetalle" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="Medicion">
+              <PropertyRef Name="idMedicion" />
+            </Principal>
+            <Dependent Role="RutaMedicionDetalle">
+              <PropertyRef Name="idMedicion" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_RutaMedicionDetalle_Medidor">
+          <End Type="CooperativaModel.Medidor" Role="Medidor" Multiplicity="1" />
+          <End Type="CooperativaModel.RutaMedicionDetalle" Role="RutaMedicionDetalle" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="Medidor">
+              <PropertyRef Name="idMedidor" />
+            </Principal>
+            <Dependent Role="RutaMedicionDetalle">
+              <PropertyRef Name="idMedidor" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
+        <Association Name="FK_RutaMedicionDetalle_Ruta">
+          <End Type="CooperativaModel.RutaMedicion" Role="RutaMedicion" Multiplicity="1" />
+          <End Type="CooperativaModel.RutaMedicionDetalle" Role="RutaMedicionDetalle" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="RutaMedicion">
+              <PropertyRef Name="idRutaMedicion" />
+            </Principal>
+            <Dependent Role="RutaMedicionDetalle">
+              <PropertyRef Name="idRutaMedicion" />
+            </Dependent>
+          </ReferentialConstraint>
+        </Association>
       </Schema>
     </edmx:ConceptualModels>
     <!-- C-S mapping content -->
@@ -2010,14 +2228,6 @@
           </FunctionImportMapping>
           <FunctionImportMapping FunctionImportName="sp_renamediagram" FunctionName="CooperativaModel.Store.sp_renamediagram" />
           <FunctionImportMapping FunctionImportName="sp_upgraddiagrams" FunctionName="CooperativaModel.Store.sp_upgraddiagrams" />
-          <EntitySetMapping Name="EstadoTurno">
-            <EntityTypeMapping TypeName="CooperativaModel.EstadoTurno">
-              <MappingFragment StoreEntitySet="EstadoTurno">
-                <ScalarProperty Name="NombreEstado" ColumnName="NombreEstado" />
-                <ScalarProperty Name="idEstadoTurno" ColumnName="idEstadoTurno" />
-              </MappingFragment>
-            </EntityTypeMapping>
-          </EntitySetMapping>
           <EntitySetMapping Name="Medicion">
             <EntityTypeMapping TypeName="CooperativaModel.Medicion">
               <MappingFragment StoreEntitySet="Medicion">
@@ -2041,19 +2251,6 @@
               <MappingFragment StoreEntitySet="TipoLectura">
                 <ScalarProperty Name="Nombre" ColumnName="Nombre" />
                 <ScalarProperty Name="idTipoLectura" ColumnName="idTipoLectura" />
-              </MappingFragment>
-            </EntityTypeMapping>
-          </EntitySetMapping>
-          <EntitySetMapping Name="Turno">
-            <EntityTypeMapping TypeName="CooperativaModel.Turno">
-              <MappingFragment StoreEntitySet="Turno">
-                <ScalarProperty Name="Observaciones" ColumnName="Observaciones" />
-                <ScalarProperty Name="Motivo" ColumnName="Motivo" />
-                <ScalarProperty Name="Hora" ColumnName="Hora" />
-                <ScalarProperty Name="Fecha" ColumnName="Fecha" />
-                <ScalarProperty Name="idEstadoTurno" ColumnName="idEstadoTurno" />
-                <ScalarProperty Name="idSocio" ColumnName="idSocio" />
-                <ScalarProperty Name="idTurno" ColumnName="idTurno" />
               </MappingFragment>
             </EntityTypeMapping>
           </EntitySetMapping>
@@ -2154,6 +2351,68 @@
                 <ScalarProperty Name="idEmpleado" ColumnName="idEmpleado" />
                 <ScalarProperty Name="idSocio" ColumnName="idSocio" />
                 <ScalarProperty Name="idFactura" ColumnName="idFactura" />
+              </MappingFragment>
+            </EntityTypeMapping>
+          </EntitySetMapping>
+          <EntitySetMapping Name="EstadoTurno">
+            <EntityTypeMapping TypeName="CooperativaModel.EstadoTurno">
+              <MappingFragment StoreEntitySet="EstadoTurno">
+                <ScalarProperty Name="Nombre" ColumnName="Nombre" />
+                <ScalarProperty Name="IdEstadoTurno" ColumnName="IdEstadoTurno" />
+              </MappingFragment>
+            </EntityTypeMapping>
+          </EntitySetMapping>
+          <EntitySetMapping Name="Turnos">
+            <EntityTypeMapping TypeName="CooperativaModel.Turnos">
+              <MappingFragment StoreEntitySet="Turnos">
+                <ScalarProperty Name="FechaActualizacion" ColumnName="FechaActualizacion" />
+                <ScalarProperty Name="FechaCreacion" ColumnName="FechaCreacion" />
+                <ScalarProperty Name="ObservacionAdmin" ColumnName="ObservacionAdmin" />
+                <ScalarProperty Name="HoraPropuesta" ColumnName="HoraPropuesta" />
+                <ScalarProperty Name="FechaPropuesta" ColumnName="FechaPropuesta" />
+                <ScalarProperty Name="IdEstadoTurno" ColumnName="IdEstadoTurno" />
+                <ScalarProperty Name="Motivo" ColumnName="Motivo" />
+                <ScalarProperty Name="Hora" ColumnName="Hora" />
+                <ScalarProperty Name="Fecha" ColumnName="Fecha" />
+                <ScalarProperty Name="SocioDocumento" ColumnName="SocioDocumento" />
+                <ScalarProperty Name="SocioNombre" ColumnName="SocioNombre" />
+                <ScalarProperty Name="IdSocio" ColumnName="IdSocio" />
+                <ScalarProperty Name="IdTurno" ColumnName="IdTurno" />
+              </MappingFragment>
+            </EntityTypeMapping>
+          </EntitySetMapping>
+          <EntitySetMapping Name="RutaMedicion">
+            <EntityTypeMapping TypeName="CooperativaModel.RutaMedicion">
+              <MappingFragment StoreEntitySet="RutaMedicion">
+                <ScalarProperty Name="Observacion" ColumnName="Observacion" />
+                <ScalarProperty Name="FirmaMimeType" ColumnName="FirmaMimeType" />
+                <ScalarProperty Name="FirmaDigital" ColumnName="FirmaDigital" />
+                <ScalarProperty Name="FechaFinalizacion" ColumnName="FechaFinalizacion" />
+                <ScalarProperty Name="FechaInicio" ColumnName="FechaInicio" />
+                <ScalarProperty Name="FechaCreacion" ColumnName="FechaCreacion" />
+                <ScalarProperty Name="Estado" ColumnName="Estado" />
+                <ScalarProperty Name="Fecha" ColumnName="Fecha" />
+                <ScalarProperty Name="Nombre" ColumnName="Nombre" />
+                <ScalarProperty Name="idEmpleado" ColumnName="idEmpleado" />
+                <ScalarProperty Name="idRutaMedicion" ColumnName="idRutaMedicion" />
+              </MappingFragment>
+            </EntityTypeMapping>
+          </EntitySetMapping>
+          <EntitySetMapping Name="RutaMedicionDetalle">
+            <EntityTypeMapping TypeName="CooperativaModel.RutaMedicionDetalle">
+              <MappingFragment StoreEntitySet="RutaMedicionDetalle">
+                <ScalarProperty Name="FotoMedidorUrl" ColumnName="FotoMedidorUrl" />
+                <ScalarProperty Name="Longitud" ColumnName="Longitud" />
+                <ScalarProperty Name="Latitud" ColumnName="Latitud" />
+                <ScalarProperty Name="Observacion" ColumnName="Observacion" />
+                <ScalarProperty Name="FechaHoraLectura" ColumnName="FechaHoraLectura" />
+                <ScalarProperty Name="LecturaInformada" ColumnName="LecturaInformada" />
+                <ScalarProperty Name="idMedicion" ColumnName="idMedicion" />
+                <ScalarProperty Name="Estado" ColumnName="Estado" />
+                <ScalarProperty Name="Orden" ColumnName="Orden" />
+                <ScalarProperty Name="idMedidor" ColumnName="idMedidor" />
+                <ScalarProperty Name="idRutaMedicion" ColumnName="idRutaMedicion" />
+                <ScalarProperty Name="idRutaMedicionDetalle" ColumnName="idRutaMedicionDetalle" />
               </MappingFragment>
             </EntityTypeMapping>
           </EntitySetMapping>

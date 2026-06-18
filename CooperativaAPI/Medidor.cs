@@ -18,6 +18,7 @@ namespace CooperativaAPI
         public Medidor()
         {
             this.Medicion = new HashSet<Medicion>();
+            this.RutaMedicionDetalle = new HashSet<RutaMedicionDetalle>();
         }
     
         public int idMedidor { get; set; }
@@ -31,5 +32,7 @@ namespace CooperativaAPI
         public virtual ICollection<Medicion> Medicion { get; set; }
         public virtual ServicioSocio ServicioSocio { get; set; }
         public virtual TipoMedidor TipoMedidor { get; set; }
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Usage", "CA2227:CollectionPropertiesShouldBeReadOnly")]
+        public virtual ICollection<RutaMedicionDetalle> RutaMedicionDetalle { get; set; }
     }
 }

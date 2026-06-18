@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Linq;
 using System.Web.Http;
+using CooperativaAPI.Filters;
 using CooperativaAPI.Data;
 
 namespace CooperativaAPI.Controllers
@@ -12,6 +13,7 @@ namespace CooperativaAPI.Controllers
 
         [HttpGet]
         [Route("")]
+        [JwtAuthorize(Roles = "Administrador,Socio")]
         public IHttpActionResult GetAll()
         {
             try
@@ -24,6 +26,7 @@ namespace CooperativaAPI.Controllers
                     select new
                     {
                         r.idRequisitoServicio,
+                        r.idServicio,
                         r.Nombre,
                         r.Descripcion,
                         r.Obligatorio,
@@ -39,12 +42,15 @@ namespace CooperativaAPI.Controllers
             }
         }
 
-        [HttpGet]
+        [HttpPost]
         [Route("")]
+        [JwtAuthorize(Roles = "Administrador")]
         public IHttpActionResult Crear([FromBody] RequisitoServicio requisito)
         {
             try
             {
+                var error = ValidarRequisito(requisito);
+                if (error != null) return BadRequest(error);
                 requisito.Activo = true;
 
                 db.RequisitoServicio.Add(requisito);
@@ -60,6 +66,7 @@ namespace CooperativaAPI.Controllers
 
         [HttpPut]
         [Route("{id}")]
+        [JwtAuthorize(Roles = "Administrador")]
         public IHttpActionResult Editar(int id, [FromBody] RequisitoServicio requisitoEditado)
         {
             try
@@ -69,9 +76,13 @@ namespace CooperativaAPI.Controllers
                 if (requisito == null)
                     return NotFound();
 
+                var error = ValidarRequisito(requisitoEditado);
+                if (error != null) return BadRequest(error);
+
                 requisito.Nombre = requisitoEditado.Nombre;
                 requisito.Descripcion = requisitoEditado.Descripcion;
                 requisito.Obligatorio = requisitoEditado.Obligatorio;
+                requisito.idServicio = requisitoEditado.idServicio;
 
                 db.SaveChanges();
 
@@ -85,6 +96,7 @@ namespace CooperativaAPI.Controllers
 
         [HttpPut]
         [Route("estado/{id}")]
+        [JwtAuthorize(Roles = "Administrador")]
         public IHttpActionResult CambiarEstado(int id)
         {
             try
@@ -104,6 +116,16 @@ namespace CooperativaAPI.Controllers
             {
                 return BadRequest(ex.Message);
             }
+        }
+
+        private string ValidarRequisito(RequisitoServicio requisito)
+        {
+            if (requisito == null) return "Los datos del requisito son obligatorios.";
+            if (string.IsNullOrWhiteSpace(requisito.Nombre)) return "El nombre es obligatorio.";
+            if (requisito.Nombre.Trim().Length > 120) return "El nombre no puede superar 120 caracteres.";
+            if (!db.Servicio.Any(s => s.idServicio == requisito.idServicio))
+                return "El servicio no existe.";
+            return null;
         }
     }
 }

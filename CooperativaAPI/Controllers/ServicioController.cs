@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Linq;
 using System.Web.Http;
+using CooperativaAPI.Filters;
 using CooperativaAPI.Data;
 
 namespace CooperativaAPI.Controllers
@@ -40,6 +41,7 @@ namespace CooperativaAPI.Controllers
         // POST
         [HttpPost]
         [Route("")]
+        [JwtAuthorize(Roles = "Administrador")]
         public IHttpActionResult Crear([FromBody] Servicio servicio)
         {
             try
@@ -67,6 +69,7 @@ namespace CooperativaAPI.Controllers
         // PUT
         [HttpPut]
         [Route("{id:int}")]
+        [JwtAuthorize(Roles = "Administrador")]
         public IHttpActionResult Editar(int id, [FromBody] Servicio servicioEditado)
         {
             try
@@ -97,6 +100,7 @@ namespace CooperativaAPI.Controllers
         // DELETE
         [HttpDelete]
         [Route("{id:int}")]
+        [JwtAuthorize(Roles = "Administrador")]
         public IHttpActionResult Eliminar(int id)
         {
             try

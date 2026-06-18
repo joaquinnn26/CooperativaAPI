@@ -22,6 +22,7 @@ namespace CooperativaAPI
             this.HistorialEstadoSolicitud = new HashSet<HistorialEstadoSolicitud>();
             this.SolicitudServicio = new HashSet<SolicitudServicio>();
             this.Factura = new HashSet<Factura>();
+            this.RutaMedicion = new HashSet<RutaMedicion>();
         }
     
         public int idEmpleado { get; set; }
@@ -42,5 +43,7 @@ namespace CooperativaAPI
         public virtual ICollection<SolicitudServicio> SolicitudServicio { get; set; }
         [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Usage", "CA2227:CollectionPropertiesShouldBeReadOnly")]
         public virtual ICollection<Factura> Factura { get; set; }
+        [System.Diagnostics.CodeAnalysis.SuppressMessage("Microsoft.Usage", "CA2227:CollectionPropertiesShouldBeReadOnly")]
+        public virtual ICollection<RutaMedicion> RutaMedicion { get; set; }
     }
 }

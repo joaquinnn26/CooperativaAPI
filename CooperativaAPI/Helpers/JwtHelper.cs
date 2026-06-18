@@ -20,7 +20,9 @@ namespace CooperativaAPI.Helpers
             {
                 new Claim(ClaimTypes.Name, usuario.Usuario),
                 new Claim(ClaimTypes.Role, usuario.Rol.NombreRol),
-                new Claim("idSocio", usuario.idSocio.ToString())
+                new Claim("idUsuarioSistema", usuario.idUsuarioSistema.ToString()),
+                new Claim("idSocio", usuario.idSocio.ToString()),
+                new Claim("idEmpleado", usuario.idEmpleado.HasValue ? usuario.idEmpleado.Value.ToString() : "")
             };
 
             var token = new JwtSecurityToken(

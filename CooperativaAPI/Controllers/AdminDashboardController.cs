@@ -1,10 +1,12 @@
 ﻿using System;
 using System.Linq;
 using System.Web.Http;
+using CooperativaAPI.Filters;
 
 namespace CooperativaAPI.Controllers
 {
     [RoutePrefix("api/admin/dashboard")]
+    [JwtAuthorize(Roles = "Administrador")]
     public class AdminDashboardController : ApiController
     {
         private readonly CooperativaEntities db = new CooperativaEntities();
@@ -37,14 +39,14 @@ namespace CooperativaAPI.Controllers
                 var reclamosTotal = db.Reclamo.Count(r => r.Activo);
                 var reclamosActivos = db.Reclamo.Count(r => r.Activo && r.idEstadoReclamo != 3);
 
-                var turnosTotal = db.Turno.Count();
-                var turnosPendientes = db.Turno.Count(t =>
-                    t.idEstadoTurno == 1 ||
-                    t.idEstadoTurno == 3
+                var turnosTotal = db.Turnos.Count();
+                var turnosPendientes = db.Turnos.Count(t =>
+                    t.IdEstadoTurno == 1 ||
+                    t.IdEstadoTurno == 3
                 );
-                var turnosConfirmados = db.Turno.Count(t =>
-                    t.idEstadoTurno == 2 ||
-                    t.idEstadoTurno == 6
+                var turnosConfirmados = db.Turnos.Count(t =>
+                    t.IdEstadoTurno == 2 ||
+                    t.IdEstadoTurno == 6
                 );
 
                 return Ok(new
