@@ -1,10 +1,12 @@
 ﻿using System;
 using System.Linq;
-using System.Web.Http;
-using System.Data.Entity;
+using System.Net;
+using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
-using System.Security.Claims;
+using System.Text.RegularExpressions;
+using System.Web.Http;
+using System.Data.Entity;
 using CooperativaAPI.Data;
 using CooperativaAPI.Filters;
 
@@ -14,8 +16,6 @@ namespace CooperativaAPI.Controllers
     public class SocioController : ApiController
     {
         private CooperativaEntities db = new CooperativaEntities();
-
-
 
         [HttpGet]
         [Route("")]
@@ -54,8 +54,6 @@ namespace CooperativaAPI.Controllers
                         s.Persona.Numero
                     },
                     Usuario = s.UsuarioSistemaUnico != null ? s.UsuarioSistemaUnico.Usuario : null,
-
-    
                     Servicios = db.ServicioSocio
                         .Where(ss => ss.idSocio == s.idSocio)
                         .Select(ss => new {
@@ -73,23 +71,26 @@ namespace CooperativaAPI.Controllers
             }
         }
 
-
         [HttpPost]
         [Route("")]
         [AllowAnonymous]
         public IHttpActionResult Crear([FromBody] Persona persona)
         {
             if (persona == null)
-                return BadRequest("Datos inválidos.");
+                return ValidationError("Los datos del socio son obligatorios.");
+
+            var error = ValidarPersona(persona);
+            if (error != null) return ValidationError(error);
 
             using (var trans = db.Database.BeginTransaction())
             {
                 try
                 {
-           
+                    NormalizarPersona(persona);
+
                     bool personaExiste = db.Persona.Any(p => p.Documento == persona.Documento);
                     if (personaExiste)
-                        return BadRequest("Ya existe una persona registrada con este documento.");
+                        return Content(HttpStatusCode.Conflict, "Ya existe una persona registrada con este documento.");
 
                     db.Persona.Add(persona);
                     db.SaveChanges();
@@ -107,7 +108,6 @@ namespace CooperativaAPI.Controllers
                     if (rolSocio == null)
                         return BadRequest("No existe un rol 'Socio'.");
 
-                
                     string passwordTemporal = Guid.NewGuid().ToString().Substring(0, 8);
                     string passwordHasheada = HashPassword(passwordTemporal);
 
@@ -148,16 +148,27 @@ namespace CooperativaAPI.Controllers
             try
             {
                 if (User.IsInRole("Socio") && ObtenerClaimEntero("idSocio") != id)
-                    return Content(System.Net.HttpStatusCode.Forbidden, "No puedes editar otro socio.");
+                    return Content(HttpStatusCode.Forbidden, "No puedes editar otro socio.");
 
                 if (personaEditada == null)
-                    return BadRequest("Los datos del socio son obligatorios.");
+                    return ValidationError("Los datos del socio son obligatorios.");
+
+                var error = ValidarPersona(personaEditada);
+                if (error != null) return ValidationError(error);
 
                 var socio = db.Socio.Find(id);
                 if (socio == null) return NotFound();
 
                 var persona = db.Persona.Find(socio.idPersona);
                 if (persona == null) return NotFound();
+
+                NormalizarPersona(personaEditada);
+
+                bool documentoDuplicado = db.Persona.Any(p => p.Documento == personaEditada.Documento && p.idPersona != persona.idPersona);
+                if (documentoDuplicado)
+                    return Content(HttpStatusCode.Conflict, "Ya existe una persona registrada con este documento.");
+
+                var documentoAnterior = persona.Documento;
 
                 persona.Nombre = personaEditada.Nombre;
                 persona.Apellido = personaEditada.Apellido;
@@ -166,6 +177,10 @@ namespace CooperativaAPI.Controllers
                 persona.Email = personaEditada.Email;
                 persona.Calle = personaEditada.Calle;
                 persona.Numero = personaEditada.Numero;
+
+                var usuario = db.UsuarioSistema.FirstOrDefault(u => u.idSocio == socio.idSocio);
+                if (usuario != null && usuario.Usuario == documentoAnterior)
+                    usuario.Usuario = personaEditada.Documento;
 
                 db.SaveChanges();
                 return Ok("Socio actualizado correctamente.");
@@ -176,56 +191,30 @@ namespace CooperativaAPI.Controllers
             }
         }
 
-
         [HttpDelete]
         [Route("{id}")]
         [JwtAuthorize(Roles = "Administrador")]
         public IHttpActionResult Eliminar(int id)
         {
-            using (var trans = db.Database.BeginTransaction())
+            try
             {
-                try
-                {
-                    var socio = db.Socio.Find(id);
-                    if (socio == null) return NotFound();
+                var socio = db.Socio.Find(id);
+                if (socio == null) return NotFound();
 
-                    var serviciosSocio = db.ServicioSocio.Where(ss => ss.idSocio == socio.idSocio).ToList();
-                    if (serviciosSocio.Any())
-                    {
-                        db.ServicioSocio.RemoveRange(serviciosSocio);
-                        db.SaveChanges();
-                    }
+                if (socio.Activo == false)
+                    return Ok("Socio ya estaba dado de baja.");
 
-                    var reclamos = db.Reclamo.Where(r => r.idSocio == socio.idSocio).ToList();
-                    if (reclamos.Any())
-                    {
-                        db.Reclamo.RemoveRange(reclamos);
-                        db.SaveChanges();
-                    }
+                socio.Activo = false;
+                db.SaveChanges();
 
-                  
-                    var usuario = db.UsuarioSistema.FirstOrDefault(u => u.idSocio == socio.idSocio);
-                    if (usuario != null)
-                    {
-                        db.UsuarioSistema.Remove(usuario);
-                        db.SaveChanges();
-                    }
-
-                    db.Socio.Remove(socio);
-                    db.SaveChanges();
-
-                    trans.Commit();
-                    return Ok("✅ Socio, usuario y relaciones eliminados correctamente.");
-                }
-                catch (Exception ex)
-                {
-                    trans.Rollback();
-                    return BadRequest("❌ Error al eliminar socio: " + ex.ToString());
-                }
+                return Ok("Socio dado de baja correctamente. No se eliminaron historial ni relaciones.");
+            }
+            catch (Exception ex)
+            {
+                return BadRequest("Error al dar de baja socio: " + ex.Message);
             }
         }
 
-    
         private string HashPassword(string password)
         {
             using (var sha = SHA256.Create())
@@ -246,10 +235,10 @@ namespace CooperativaAPI.Controllers
                 var socio = db.Socio.Find(id);
                 if (socio == null) return NotFound();
 
-                socio.Activo = !socio.Activo;  
+                socio.Activo = !socio.Activo;
                 db.SaveChanges();
 
-                string estado = (bool)socio.Activo ? "activado" : "dado de baja";
+                string estado = socio.Activo == true ? "activado" : "dado de baja";
                 return Ok($"Socio {estado} correctamente.");
             }
             catch (Exception ex)
@@ -258,12 +247,54 @@ namespace CooperativaAPI.Controllers
             }
         }
 
+        private static IHttpActionResult ValidationError(string message)
+        {
+            return new System.Web.Http.Results.ResponseMessageResult(
+                new System.Net.Http.HttpResponseMessage((HttpStatusCode)422)
+                {
+                    Content = new System.Net.Http.StringContent(message)
+                });
+        }
+
+        private static void NormalizarPersona(Persona persona)
+        {
+            persona.Nombre = Limpiar(persona.Nombre);
+            persona.Apellido = Limpiar(persona.Apellido);
+            persona.Documento = Limpiar(persona.Documento);
+            persona.Telefono = Limpiar(persona.Telefono);
+            persona.Email = Limpiar(persona.Email).ToLowerInvariant();
+            persona.Calle = Limpiar(persona.Calle);
+            persona.Numero = Limpiar(persona.Numero);
+        }
+
+        private static string ValidarPersona(Persona persona)
+        {
+            if (!NombreValido(persona.Nombre)) return "El nombre debe tener entre 2 y 25 letras y solo puede contener letras y espacios.";
+            if (!NombreValido(persona.Apellido)) return "El apellido debe tener entre 2 y 25 letras y solo puede contener letras y espacios.";
+            if (!Regex.IsMatch(Limpiar(persona.Documento), @"^\d{7,9}$")) return "El documento debe contener entre 7 y 9 numeros.";
+            if (Limpiar(persona.Telefono).Length < 7 || Limpiar(persona.Telefono).Length > 20 || !Regex.IsMatch(Limpiar(persona.Telefono), @"^[0-9+() \-]+$")) return "El telefono debe tener entre 7 y 20 caracteres validos.";
+            if (Limpiar(persona.Email).Length < 6 || Limpiar(persona.Email).Length > 120 || !Regex.IsMatch(Limpiar(persona.Email), @"^[^\s@]+@[^\s@]+\.[^\s@]{2,}$", RegexOptions.IgnoreCase)) return "El correo electronico no es valido.";
+            if (Limpiar(persona.Calle).Length < 2 || Limpiar(persona.Calle).Length > 100) return "La calle debe tener entre 2 y 100 caracteres.";
+            if (Limpiar(persona.Numero).Length < 1 || Limpiar(persona.Numero).Length > 7 || !Regex.IsMatch(Limpiar(persona.Numero), @"^\d{1,6}[A-Za-z]?$")) return "El numero de domicilio no es valido.";
+            return null;
+        }
+
+        private static bool NombreValido(string value)
+        {
+            var text = Limpiar(value);
+            return text.Length >= 2 && text.Length <= 25 && Regex.IsMatch(text, @"^[\p{L}]+(?: [\p{L}]+)*$");
+        }
+
+        private static string Limpiar(string value)
+        {
+            return Regex.Replace(value ?? "", @"\s+", " ").Trim();
+        }
+
         private int? ObtenerClaimEntero(string tipo)
         {
             var identity = User?.Identity as ClaimsIdentity;
             int value;
             return int.TryParse(identity?.FindFirst(tipo)?.Value, out value) ? value : (int?)null;
         }
-
     }
 }

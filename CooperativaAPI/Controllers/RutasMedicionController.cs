@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.Entity;
@@ -124,21 +124,36 @@ namespace CooperativaAPI.Controllers
                     }
 
                     var fecha = request.Fecha.Date;
-                    var ocupados = db.RutasMedicionDetalle
+                    var inicioMes = new DateTime(fecha.Year, fecha.Month, 1);
+                    var inicioMesSiguiente = inicioMes.AddMonths(1);
+                    var periodo = fecha.ToString("yyyy-MM");
+
+                    var ocupadosEnRuta = db.RutasMedicionDetalle
                         .Where(d =>
                             medidoresIds.Contains(d.idMedidor) &&
-                            d.RutaMedicion.Fecha == fecha &&
-                            (d.RutaMedicion.Estado == "Pendiente" || d.RutaMedicion.Estado == "EnCurso"))
+                            d.RutaMedicion.Fecha >= inicioMes &&
+                            d.RutaMedicion.Fecha < inicioMesSiguiente &&
+                            d.RutaMedicion.Estado != "Cancelada")
                         .Select(d => d.idMedidor)
                         .Distinct()
                         .ToList();
+
+                    var medidosEnPeriodo = db.Mediciones
+                        .Where(m =>
+                            medidoresIds.Contains(m.idMedidor) &&
+                            (m.Periodo == periodo || (m.FechaLectura >= inicioMes && m.FechaLectura < inicioMesSiguiente)))
+                        .Select(m => m.idMedidor)
+                        .Distinct()
+                        .ToList();
+
+                    var ocupados = ocupadosEnRuta.Concat(medidosEnPeriodo).Distinct().ToList();
 
                     if (ocupados.Any())
                     {
                         transaction.Rollback();
                         return Content(System.Net.HttpStatusCode.Conflict, new
                         {
-                            message = "Algunos medidores ya estan en una hoja abierta para esa fecha.",
+                            message = "Algunos medidores ya tienen ruta o medicion registrada para ese mes.",
                             medidores = ocupados
                         });
                     }

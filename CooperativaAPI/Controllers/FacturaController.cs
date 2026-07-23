@@ -340,9 +340,19 @@ namespace CooperativaAPI.Controllers
                 if (socio == null)
                     return BadRequest("Socio no encontrado.");
 
-                var empleado = db.Empleado.Find(request.idEmpleado);
+                var idEmpleadoEmisor = request.idEmpleado;
+                var idEmpleadoClaim = ObtenerClaimEntero("idEmpleado");
+
+                if (idEmpleadoEmisor <= 0 && idEmpleadoClaim.HasValue)
+                    idEmpleadoEmisor = idEmpleadoClaim.Value;
+
+                var empleado = db.Empleado.FirstOrDefault(e => e.idEmpleado == idEmpleadoEmisor && e.Activo == true);
+
                 if (empleado == null)
-                    return BadRequest("Empleado no encontrado.");
+                    empleado = db.Empleado.FirstOrDefault(e => e.Activo == true);
+
+                if (empleado == null)
+                    return BadRequest("No hay un empleado activo disponible para registrar la factura.");
 
                 var servicio = db.Servicio.Find(request.idServicio);
                 if (servicio == null)
@@ -361,7 +371,7 @@ namespace CooperativaAPI.Controllers
                 var factura = new Factura
                 {
                     idSocio = request.idSocio,
-                    idEmpleado = request.idEmpleado,
+                    idEmpleado = empleado.idEmpleado,
                     idServicio = request.idServicio,
                     MontoTotal = request.MontoTotal,
                     FechaEmision = fechaEmision,

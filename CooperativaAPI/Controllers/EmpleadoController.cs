@@ -128,6 +128,81 @@ namespace CooperativaAPI.Controllers
                 }
             }
         }
+        [HttpPut]
+        [Route("{id:int}")]
+        [JwtAuthorize(Roles = "Administrador")]
+        public IHttpActionResult Actualizar(int id, dynamic data)
+        {
+            try
+            {
+                var empleado = db.Empleado.Find(id);
+
+                if (empleado == null)
+                    return NotFound();
+
+                int idCargo = data.idCargo;
+                bool cargoExiste = db.Cargo.Any(c => c.idCargo == idCargo);
+
+                if (!cargoExiste)
+                    return BadRequest("El cargo seleccionado no existe.");
+
+                empleado.idCargo = idCargo;
+                db.SaveChanges();
+
+                return Ok(new
+                {
+                    mensaje = "Empleado actualizado correctamente.",
+                    empleado.idEmpleado,
+                    empleado.idCargo,
+                    empleado.FechaDelInicio,
+                    empleado.Activo
+                });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+        [HttpDelete]
+        [Route("{id:int}")]
+        [JwtAuthorize(Roles = "Administrador")]
+        public IHttpActionResult Eliminar(int id)
+        {
+            using (var trans = db.Database.BeginTransaction())
+            {
+                try
+                {
+                    var empleado = db.Empleado.Find(id);
+
+                    if (empleado == null)
+                        return NotFound();
+
+                    empleado.Activo = false;
+
+                    var usuario = db.UsuarioSistema.FirstOrDefault(u => u.idEmpleado == empleado.idEmpleado);
+                    if (usuario != null)
+                    {
+                        usuario.idEmpleado = null;
+
+                        var rolSocio = db.Rol.FirstOrDefault(r => r.NombreRol == "Socio");
+                        if (rolSocio != null)
+                            usuario.idRol = rolSocio.idRol;
+                    }
+
+                    db.SaveChanges();
+                    trans.Commit();
+
+                    return Ok("Empleado dado de baja correctamente.");
+                }
+                catch (Exception ex)
+                {
+                    trans.Rollback();
+                    return BadRequest("Error al eliminar empleado: " + ex.Message);
+                }
+            }
+        }
+
+
 
         [HttpPut]
         [Route("estado/{id}")]
