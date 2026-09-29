@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Net;
 using System.Security.Claims;
@@ -26,7 +26,7 @@ namespace CooperativaAPI.Controllers
                     join p in db.Persona on e.idPersona equals p.idPersona
                     join tl in db.TipoLectura on m.idTipoLectura equals tl.idTipoLectura
                     join med in db.Medidor on m.idMedidor equals med.idMedidor
-                    join ss in db.ServicioSocio on med.idServicioSocio equals ss.idServicioSocio
+                    join ss in db.ServicioSocio on m.idServicioSocio equals ss.idServicioSocio
                     join serv in db.Servicio on ss.idServicio equals serv.idServicio
                     select new
                     {
@@ -69,7 +69,7 @@ namespace CooperativaAPI.Controllers
                 var mediciones = (
                     from m in db.Medicion
                     join med in db.Medidor on m.idMedidor equals med.idMedidor
-                    join ss in db.ServicioSocio on med.idServicioSocio equals ss.idServicioSocio
+                    join ss in db.ServicioSocio on m.idServicioSocio equals ss.idServicioSocio
                     join serv in db.Servicio on ss.idServicio equals serv.idServicio
                     join tl in db.TipoLectura on m.idTipoLectura equals tl.idTipoLectura
                     join e in db.Empleado on m.idEmpleado equals e.idEmpleado
@@ -159,7 +159,7 @@ namespace CooperativaAPI.Controllers
                     medicion.idEmpleado = idEmpleadoActual.Value;
                 }
 
-                var medidor = db.Medidor.FirstOrDefault(m => m.idMedidor == medicion.idMedidor && m.Activo == true);
+                var medidor = db.Medidor.FirstOrDefault(m => m.idMedidor == medicion.idMedidor && m.Activo == true && m.idServicioSocio != null);
                 if (medidor == null)
                     return BadRequest("El medidor no existe o está inactivo.");
 
@@ -181,11 +181,13 @@ namespace CooperativaAPI.Controllers
                     .FirstOrDefault();
 
                 decimal lecturaAnterior = ultimaMedicion != null ? ultimaMedicion.ValorLectura : 0;
+                var baseInstalacion = db.Database.SqlQuery<decimal?>("SELECT LecturaInicial FROM dbo.AsignacionMedidor WHERE idMedidor=@id AND Cerrada=0", new System.Data.SqlClient.SqlParameter("@id",medicion.idMedidor)).SingleOrDefault();
+                lecturaAnterior = Math.Max(lecturaAnterior,baseInstalacion ?? 0);
 
                 if (medicion.ValorLectura < lecturaAnterior)
                     return BadRequest("La lectura actual no puede ser menor a la lectura anterior.");
 
-                medicion.idServicioSocio = medidor.idServicioSocio;
+                medicion.idServicioSocio = medidor.idServicioSocio.Value;
                 medicion.ConsumoCalculado = medicion.ValorLectura - lecturaAnterior;
                 medicion.FechaCarga = DateTime.Now;
 
@@ -246,7 +248,7 @@ namespace CooperativaAPI.Controllers
                 if (medidor == null)
                     return BadRequest("El medidor asociado no existe.");
 
-                medicion.idServicioSocio = medidor.idServicioSocio;
+                // Se conserva la conexión histórica de esta lectura.
                 medicion.idTipoLectura = medicionEditada.idTipoLectura;
                 medicion.ValorLectura = medicionEditada.ValorLectura;
                 medicion.ConsumoCalculado = medicionEditada.ValorLectura - lecturaAnterior;

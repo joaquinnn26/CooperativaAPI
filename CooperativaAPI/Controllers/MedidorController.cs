@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Net;
 using System.Security.Claims;
@@ -65,6 +65,7 @@ namespace CooperativaAPI.Controllers
                         m.idMedidor,
 
                         m.Numero,
+                        m.idServicioSocio,
 
                         TipoMedidor = tm.Nombre,
 
@@ -105,7 +106,7 @@ namespace CooperativaAPI.Controllers
                     join p in db.Persona on s.idPersona equals p.idPersona
                     join serv in db.Servicio on ss.idServicio equals serv.idServicio
                     join tm in db.TipoMedidor on m.idTipoMedidor equals tm.idTipoMedidor
-                    where ss.idSocio == idSocio && ss.Activo == true
+                    where ss.idSocio == idSocio && ss.Activo == true && m.Activo == true
                     select new
                     {
                         m.idMedidor,
@@ -203,49 +204,7 @@ namespace CooperativaAPI.Controllers
         [Route("")]
         [JwtAuthorize(Roles = "Administrador")]
         public IHttpActionResult Crear([FromBody] Medidor medidor)
-        {
-            try
-            {
-                if (medidor == null)
-                    return BadRequest("Datos inválidos.");
-
-                // VALIDAR SERVICIO SOCIO
-                bool existeServicioSocio = db.ServicioSocio
-                    .Any(ss => ss.idServicioSocio == medidor.idServicioSocio);
-
-                if (!existeServicioSocio)
-                    return BadRequest("El servicio del socio no existe.");
-
-                // VALIDAR TIPO MEDIDOR
-                bool existeTipo = db.TipoMedidor
-                    .Any(tm => tm.idTipoMedidor == medidor.idTipoMedidor);
-
-                if (!existeTipo)
-                    return BadRequest("El tipo de medidor no existe.");
-
-                // GENERAR NUMERO
-                medidor.Numero = GenerarNumeroMedidor();
-
-                // DATOS AUTOMATICOS
-                medidor.Activo = true;
-
-                medidor.FechaInstalacion = DateTime.Now;
-
-                db.Medidor.Add(medidor);
-
-                db.SaveChanges();
-
-                return Ok(new
-                {
-                    mensaje = "Medidor creado correctamente.",
-                    numeroGenerado = medidor.Numero
-                });
-            }
-            catch (Exception ex)
-            {
-                return BadRequest("Error al crear medidor: " + ex.Message);
-            }
-        }
+        { return Content(HttpStatusCode.Conflict,"Usá Inventario de medidores para registrar la operación con motivo e historial."); }
 
         // =========================================
         // EDITAR
@@ -254,28 +213,7 @@ namespace CooperativaAPI.Controllers
         [Route("{id}")]
         [JwtAuthorize(Roles = "Administrador")]
         public IHttpActionResult Editar(int id, [FromBody] Medidor medidorEditado)
-        {
-            try
-            {
-                var medidor = db.Medidor.Find(id);
-
-                if (medidor == null)
-                    return NotFound();
-
-                medidor.idTipoMedidor = medidorEditado.idTipoMedidor;
-
-                db.SaveChanges();
-
-                return Ok(new
-                {
-                    mensaje = "Medidor actualizado correctamente."
-                });
-            }
-            catch (Exception ex)
-            {
-                return BadRequest("Error al editar medidor: " + ex.Message);
-            }
-        }
+        { return Content(HttpStatusCode.Conflict,"Usá Inventario de medidores para registrar la operación con motivo e historial."); }
 
         // =========================================
         // BAJA LOGICA
@@ -284,29 +222,7 @@ namespace CooperativaAPI.Controllers
         [Route("estado/{id}")]
         [JwtAuthorize(Roles = "Administrador")]
         public IHttpActionResult CambiarEstado(int id)
-        {
-            try
-            {
-                var medidor = db.Medidor.Find(id);
-
-                if (medidor == null)
-                    return NotFound();
-
-                medidor.Activo = !medidor.Activo;
-
-                db.SaveChanges();
-
-                string estado = medidor.Activo
-                    ? "activado"
-                    : "desactivado";
-
-                return Ok("Medidor " + estado + " correctamente.");
-            }
-            catch (Exception ex)
-            {
-                return BadRequest("Error al cambiar estado: " + ex.Message);
-            }
-        }
+        { return Content(HttpStatusCode.Conflict,"Usá Inventario de medidores para registrar la operación con motivo e historial."); }
 
         // =========================================
         // ELIMINAR
@@ -315,31 +231,7 @@ namespace CooperativaAPI.Controllers
         [Route("{id}")]
         [JwtAuthorize(Roles = "Administrador")]
         public IHttpActionResult Eliminar(int id)
-        {
-            try
-            {
-                var medidor = db.Medidor.Find(id);
-
-                if (medidor == null)
-                    return NotFound();
-
-                bool tieneMediciones = db.Medicion
-                    .Any(m => m.idMedidor == id);
-
-                if (tieneMediciones)
-                    return BadRequest("No se puede eliminar porque tiene mediciones asociadas.");
-
-                db.Medidor.Remove(medidor);
-
-                db.SaveChanges();
-
-                return Ok("Medidor eliminado correctamente.");
-            }
-            catch (Exception ex)
-            {
-                return BadRequest("Error al eliminar medidor: " + ex.Message);
-            }
-        }
+        { return Content(HttpStatusCode.Conflict,"Usá Inventario de medidores para registrar la operación con motivo e historial."); }
 
         private int? ObtenerClaimEntero(string tipo)
         {

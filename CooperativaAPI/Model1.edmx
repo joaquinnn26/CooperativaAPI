@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <edmx:Edmx Version="3.0" xmlns:edmx="http://schemas.microsoft.com/ado/2009/11/edmx">
   <!-- EF Runtime content -->
   <edmx:Runtime>
@@ -118,7 +118,7 @@
           </Key>
           <Property Name="idMedidor" Type="int" StoreGeneratedPattern="Identity" Nullable="false" />
           <Property Name="Numero" Type="varchar" MaxLength="50" Nullable="false" />
-          <Property Name="idServicioSocio" Type="int" Nullable="false" />
+          <Property Name="idServicioSocio" Type="int" Nullable="true" />
           <Property Name="Activo" Type="bit" Nullable="false" />
           <Property Name="idTipoMedidor" Type="int" Nullable="false" />
           <Property Name="FechaInstalacion" Type="datetime" />
@@ -602,7 +602,7 @@
           </ReferentialConstraint>
         </Association>
         <Association Name="FK_Medidor_ServicioSocio">
-          <End Role="ServicioSocio" Type="Self.ServicioSocio" Multiplicity="1" />
+          <End Role="ServicioSocio" Type="Self.ServicioSocio" Multiplicity="0..1" />
           <End Role="Medidor" Type="Self.Medidor" Multiplicity="*" />
           <ReferentialConstraint>
             <Principal Role="ServicioSocio">
@@ -1620,7 +1620,7 @@
           </Key>
           <Property Name="idMedidor" Type="Int32" Nullable="false" annotation:StoreGeneratedPattern="Identity" />
           <Property Name="Numero" Type="String" Nullable="false" MaxLength="50" FixedLength="false" Unicode="false" />
-          <Property Name="idServicioSocio" Type="Int32" Nullable="false" />
+          <Property Name="idServicioSocio" Type="Int32" Nullable="true" />
           <Property Name="Activo" Type="Boolean" Nullable="false" />
           <Property Name="idTipoMedidor" Type="Int32" Nullable="false" />
           <Property Name="FechaInstalacion" Type="DateTime" Precision="3" />
@@ -1642,7 +1642,7 @@
           </ReferentialConstraint>
         </Association>
         <Association Name="FK_Medidor_ServicioSocio">
-          <End Type="CooperativaModel.ServicioSocio" Role="ServicioSocio" Multiplicity="1" />
+          <End Type="CooperativaModel.ServicioSocio" Role="ServicioSocio" Multiplicity="0..1" />
           <End Type="CooperativaModel.Medidor" Role="Medidor" Multiplicity="*" />
           <ReferentialConstraint>
             <Principal Role="ServicioSocio">

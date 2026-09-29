@@ -129,13 +129,6 @@ namespace CooperativaAPI.Controllers
                 if (!db.Servicio.Any(s => s.idServicio == solicitud.idServicio))
                     return BadRequest("El servicio no existe.");
 
-                bool servicioActivo = db.ServicioSocio.Any(ss =>
-                    ss.idSocio == solicitud.idSocio &&
-                    ss.idServicio == solicitud.idServicio &&
-                    ss.Activo == true);
-                if (servicioActivo)
-                    return BadRequest("Ya tenes ese servicio activo.");
-
                 var solicitudActiva = db.SolicitudServicio.Any(s =>
                     s.idSocio == solicitud.idSocio &&
                     s.idServicio == solicitud.idServicio &&
@@ -169,7 +162,7 @@ namespace CooperativaAPI.Controllers
         [JwtAuthorize(Roles = "Administrador")]
         public IHttpActionResult Aprobar(int id)
         {
-            using (var trans = db.Database.BeginTransaction())
+            using (var trans = db.Database.BeginTransaction(System.Data.IsolationLevel.Serializable))
             {
                 try
                 {
@@ -204,7 +197,7 @@ namespace CooperativaAPI.Controllers
                     else
                     {
                         solicitud.FechaResolucion = DateTime.Now;
-                        var servicioSocio = ObtenerOCrearServicioSocio(solicitud.idSocio, solicitud.idServicio);
+                        var servicioSocio = ObtenerOCrearServicioSocio(solicitud.idSocio, solicitud.idServicio, solicitud.idSolicitudServicio);
                         idServicioSocio = servicioSocio.idServicioSocio;
                         CrearMedidorSiCorresponde(servicioSocio, servicio.Nombre, out medidorCreado, out numeroMedidor);
                     }
@@ -289,7 +282,7 @@ namespace CooperativaAPI.Controllers
         [JwtAuthorize(Roles = "Administrador,Empleado")]
         public IHttpActionResult MarcarInstalada(int id, [FromBody] dynamic data)
         {
-            using (var trans = db.Database.BeginTransaction())
+            using (var trans = db.Database.BeginTransaction(System.Data.IsolationLevel.Serializable))
             {
                 try
                 {
@@ -334,8 +327,16 @@ namespace CooperativaAPI.Controllers
                     bool medidorCreado = false;
                     string numeroMedidor = null;
 
-                    var servicioSocio = ObtenerOCrearServicioSocio(solicitud.idSocio, solicitud.idServicio);
-                    CrearMedidorSiCorresponde(servicioSocio, servicio.Nombre, out medidorCreado, out numeroMedidor);
+                    var servicioSocio = ObtenerOCrearServicioSocio(solicitud.idSocio, solicitud.idServicio, solicitud.idSolicitudServicio);
+                    if(ServicioRequiereMedidor(servicio.Nombre)) {
+                        var json = (Newtonsoft.Json.Linq.JObject)data;
+                        var op = json?.ToObject<SeleccionMedidor>();
+                        if(op==null) return BadRequest("Elegí un medidor disponible o registrá el equipo nuevo.");
+                        op.Fecha=DateTimeOffset.UtcNow;
+                        medidorCreado=op.NuevoMedidor!=null;
+                        var ficha=OperacionesMedidor.Colocar(db,(System.Security.Claims.ClaimsPrincipal)User,op,servicioSocio.idServicioSocio,"Instalar",Guid.NewGuid());
+                        numeroMedidor=ficha.Numero;
+                    }
 
                     solicitud.idEstadoSolicitud = estadoAprobada.idEstadoSolicitud;
                     solicitud.idEmpleadoRevisor = idEmpleadoActual;
@@ -381,7 +382,7 @@ namespace CooperativaAPI.Controllers
         [JwtAuthorize(Roles = "Administrador,Empleado")]
         public IHttpActionResult RechazarInstalacion(int id, [FromBody] dynamic data)
         {
-            using (var trans = db.Database.BeginTransaction())
+            using (var trans = db.Database.BeginTransaction(System.Data.IsolationLevel.Serializable))
             {
                 try
                 {
@@ -502,16 +503,9 @@ namespace CooperativaAPI.Controllers
                    nombre.Contains("electric");
         }
 
-        private ServicioSocio ObtenerOCrearServicioSocio(int idSocio, int idServicio)
+        private ServicioSocio ObtenerOCrearServicioSocio(int idSocio, int idServicio, int idSolicitud)
         {
-            var servicioSocio = db.ServicioSocio.FirstOrDefault(ss =>
-                ss.idSocio == idSocio &&
-                ss.idServicio == idServicio &&
-                ss.Activo == true);
-
-            if (servicioSocio != null) return servicioSocio;
-
-            servicioSocio = new ServicioSocio
+            var servicioSocio = new ServicioSocio
             {
                 idSocio = idSocio,
                 idServicio = idServicio,
@@ -521,38 +515,13 @@ namespace CooperativaAPI.Controllers
 
             db.ServicioSocio.Add(servicioSocio);
             db.SaveChanges();
+            db.Database.ExecuteSqlCommand("INSERT dbo.SolicitudConexion(idSolicitudServicio,idServicioSocio) VALUES(@solicitud,@conexion)",new System.Data.SqlClient.SqlParameter("@solicitud",idSolicitud),new System.Data.SqlClient.SqlParameter("@conexion",servicioSocio.idServicioSocio));
             return servicioSocio;
         }
 
         private void CrearMedidorSiCorresponde(ServicioSocio servicioSocio, string nombreServicio, out bool medidorCreado, out string numeroMedidor)
-        {
-            medidorCreado = false;
-            numeroMedidor = null;
-
-            if (!ServicioRequiereMedidor(nombreServicio)) return;
-
-            bool yaTieneMedidor = db.Medidor.Any(m =>
-                m.idServicioSocio == servicioSocio.idServicioSocio &&
-                m.Activo == true);
-
-            if (yaTieneMedidor) return;
-
-            var tipoMedidorDefault = db.TipoMedidor.FirstOrDefault();
-            if (tipoMedidorDefault == null)
-                throw new InvalidOperationException("No existe un tipo de medidor para asignar al servicio.");
-
-            var nuevoMedidor = new Medidor
-            {
-                idServicioSocio = servicioSocio.idServicioSocio,
-                idTipoMedidor = tipoMedidorDefault.idTipoMedidor,
-                Numero = GenerarNumeroMedidor(),
-                FechaInstalacion = DateTime.Now,
-                Activo = true
-            };
-
-            db.Medidor.Add(nuevoMedidor);
-            medidorCreado = true;
-            numeroMedidor = nuevoMedidor.Numero;
+        { medidorCreado=false; numeroMedidor=null;
+          if(ServicioRequiereMedidor(nombreServicio)) throw new InvalidOperationException("Seleccioná un medidor real desde la instalación técnica.");
         }
 
         private string NormalizarTexto(string valor)

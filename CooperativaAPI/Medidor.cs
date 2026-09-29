@@ -23,7 +23,7 @@ namespace CooperativaAPI
     
         public int idMedidor { get; set; }
         public string Numero { get; set; }
-        public int idServicioSocio { get; set; }
+        public Nullable<int> idServicioSocio { get; set; }
         public bool Activo { get; set; }
         public int idTipoMedidor { get; set; }
         public Nullable<System.DateTime> FechaInstalacion { get; set; }

@@ -506,4 +506,11 @@
     <Compile Include="Controllers\TerritorioController.cs" />
     <Content Include="Data\20260920_Territorio.sql" />
   </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Controllers\InventarioMedidoresController.cs" />
+    <Content Include="Data\20260928_ConexionesMedidores.sql" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="Data\20260928_FlujoMedidores.sql" />
+  </ItemGroup>
 </Project>

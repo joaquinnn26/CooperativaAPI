@@ -32,6 +32,10 @@ namespace CooperativaAPI.Controllers
             public int? idZona { get; set; }
             public int? idBarrio { get; set; }
             public string Direccion { get; set; }
+            public string Localidad { get; set; }
+            public string Ambito { get; set; }
+            public string Ruta { get; set; }
+            public string Folio { get; set; }
             public string Version { get; set; }
             public string Motivo { get; set; }
         }
@@ -40,6 +44,7 @@ namespace CooperativaAPI.Controllers
             public int idServicioSocio { get; set; }
             public int idSocio { get; set; }
             public string Socio { get; set; }
+            public string NumeroSocio { get; set; }
             public string Servicio { get; set; }
             public bool Activo { get; set; }
             public int? idBarrio { get; set; }
@@ -47,6 +52,10 @@ namespace CooperativaAPI.Controllers
             public string Barrio { get; set; }
             public string Zona { get; set; }
             public string Direccion { get; set; }
+            public string Localidad { get; set; }
+            public string Ambito { get; set; }
+            public string Ruta { get; set; }
+            public string Folio { get; set; }
             public byte[] Version { get; set; }
         }
         public class Ubicacion
@@ -54,6 +63,10 @@ namespace CooperativaAPI.Controllers
             public int idServicioSocio { get; set; }
             public int? idBarrio { get; set; }
             public string Direccion { get; set; }
+            public string Localidad { get; set; }
+            public string Ambito { get; set; }
+            public string Ruta { get; set; }
+            public string Folio { get; set; }
             public byte[] Version { get; set; }
         }
         public class Movimiento
@@ -172,17 +185,18 @@ namespace CooperativaAPI.Controllers
             LEFT JOIN dbo.UbicacionServicio u ON u.idServicioSocio=s.idServicioSocio
             LEFT JOIN dbo.Barrio b ON b.idBarrio=u.idBarrio LEFT JOIN dbo.Zona z ON z.idZona=b.idZona
             WHERE (@zona IS NULL OR b.idZona=@zona) AND (@barrio IS NULL OR u.idBarrio=@barrio)
-            AND (@pendientes=0 OR u.idBarrio IS NULL OR NULLIF(LTRIM(RTRIM(u.Direccion)),'') IS NULL)
-            AND (@q='' OR CHARINDEX(@q, CONCAT(p.Nombre,' ',p.Apellido,' ',se.Nombre,' ',u.Direccion,' ',s.idSocio,' ',s.idServicioSocio))>0)";
+            AND (@pendientes=0 OR u.Localidad IS NULL OR u.Ambito IS NULL OR u.Ruta IS NULL OR u.Folio IS NULL OR NULLIF(LTRIM(RTRIM(u.Direccion)),'') IS NULL)
+            AND (@localidad='' OR u.Localidad=@localidad) AND (@ambito='' OR u.Ambito=@ambito) AND (@ruta='' OR u.Ruta=@ruta) AND (@folio='' OR u.Folio=@folio)
+            AND (@q='' OR CHARINDEX(@q, CONCAT(p.Nombre,' ',p.Apellido,' ',se.Nombre,' ',u.Direccion,' ',so.NumeroSocio,' ',s.idSocio,' ',s.idServicioSocio,' ',u.Localidad,' ',u.Ruta,' ',u.Folio))>0)";
         [HttpGet, Route("conexiones")]
-        public IHttpActionResult Conexiones(int pagina=1, int? zona=null, int? barrio=null, bool pendientes=false, string q="")
+        public IHttpActionResult Conexiones(int pagina=1, int? zona=null, int? barrio=null, bool pendientes=false, string q="", string localidad="", string ambito="", string ruta="", string folio="")
         {
             if (pagina<1 || pagina>100000 || (q ?? "").Length>100) return BadRequest("Filtros inválidos.");
-            Func<object[]> parametros=()=>new object[]{P("@zona",zona),P("@barrio",barrio),P("@pendientes",pendientes),P("@q",Texto(q))};
+            Func<object[]> parametros=()=>new object[]{P("@zona",zona),P("@barrio",barrio),P("@pendientes",pendientes),P("@q",Texto(q)),P("@localidad",Texto(localidad)),P("@ambito",Texto(ambito)),P("@ruta",Texto(ruta)),P("@folio",Texto(folio))};
             var total=db.Database.SqlQuery<int>("SELECT COUNT(*)"+DesdeConexiones,parametros()).Single();
             var args=parametros().Concat(new object[]{P("@offset",(pagina-1)*25)}).ToArray();
-            var items=db.Database.SqlQuery<Conexion>(@"SELECT s.idServicioSocio,s.idSocio,CONCAT(p.Apellido,', ',p.Nombre) Socio,se.Nombre Servicio,
-                ISNULL(s.Activo,0) Activo,u.idBarrio,b.idZona,b.Nombre Barrio,z.Nombre Zona,u.Direccion,u.Version"+DesdeConexiones+
+            var items=db.Database.SqlQuery<Conexion>(@"SELECT s.idServicioSocio,s.idSocio,so.NumeroSocio,CONCAT(p.Apellido,', ',p.Nombre) Socio,se.Nombre Servicio,
+                ISNULL(s.Activo,0) Activo,u.idBarrio,b.idZona,b.Nombre Barrio,z.Nombre Zona,u.Direccion,u.Localidad,u.Ambito,u.Ruta,u.Folio,u.Version"+DesdeConexiones+
                 " ORDER BY s.idServicioSocio OFFSET @offset ROWS FETCH NEXT 25 ROWS ONLY",args).ToList();
             return Ok(new {items,total,pagina});
         }
@@ -192,8 +206,11 @@ namespace CooperativaAPI.Controllers
         {
             if(cambio==null || !ModelState.IsValid) return BadRequest("Datos inválidos.");
             var direccion=Texto(cambio.Direccion); var motivo=Texto(cambio.Motivo);
-            if(direccion.Length==0 || direccion.Length>250 || motivo.Length==0 || motivo.Length>300 || !cambio.idBarrio.HasValue)
-                return BadRequest("Indicá dirección (hasta 250 caracteres), barrio y motivo (hasta 300 caracteres).");
+            if(direccion.Length==0 || direccion.Length>250 || motivo.Length==0 || motivo.Length>300)
+                return BadRequest("Indicá dirección o referencia de ubicación y motivo del cambio.");
+            var localidad=Texto(cambio.Localidad); var ruta=Texto(cambio.Ruta); var folio=Texto(cambio.Folio);
+            if(localidad.Length==0 || localidad.Length>100 || !new[]{"Urbano","Rural"}.Contains(cambio.Ambito) || ruta.Length>30 || folio.Length>30 || (ruta.Length==0)!=(folio.Length==0))
+                return BadRequest("Indicá localidad y ámbito. Ruta y folio se cargan juntos, sin inventar valores; hasta 30 caracteres cada uno.");
             using(var tx=db.Database.BeginTransaction(IsolationLevel.Serializable))
             {
                 try
@@ -202,12 +219,12 @@ namespace CooperativaAPI.Controllers
                     var anterior=db.Database.SqlQuery<Ubicacion>("SELECT * FROM dbo.UbicacionServicio WHERE idServicioSocio=@id",P("@id",id)).SingleOrDefault();
                     if(!MismaVersion(anterior==null?null:anterior.Version,cambio.Version))
                         return Content(HttpStatusCode.Conflict,"La ubicación cambió. Actualizá antes de editar.");
-                    if(!Existe("SELECT 1 FROM dbo.Barrio b JOIN dbo.Zona z ON z.idZona=b.idZona WHERE b.idBarrio=@id AND b.Activo=1 AND z.Activo=1",P("@id",cambio.idBarrio.Value)))
+                    if(cambio.idBarrio.HasValue && !Existe("SELECT 1 FROM dbo.Barrio b JOIN dbo.Zona z ON z.idZona=b.idZona WHERE b.idBarrio=@id AND b.Activo=1 AND z.Activo=1",P("@id",cambio.idBarrio.Value)))
                         return BadRequest("Seleccioná un barrio y una zona activos.");
                     db.Database.ExecuteSqlCommand(anterior==null
-                        ? "INSERT dbo.UbicacionServicio(idServicioSocio,idBarrio,Direccion) VALUES(@id,@barrio,@direccion)"
-                        : "UPDATE dbo.UbicacionServicio SET idBarrio=@barrio,Direccion=@direccion WHERE idServicioSocio=@id",
-                        P("@id",id),P("@barrio",cambio.idBarrio.Value),P("@direccion",direccion));
+                        ? "INSERT dbo.UbicacionServicio(idServicioSocio,idBarrio,Direccion,Localidad,Ambito,Ruta,Folio) VALUES(@id,@barrio,@direccion,@localidad,@ambito,@ruta,@folio)"
+                        : "UPDATE dbo.UbicacionServicio SET idBarrio=@barrio,Direccion=@direccion,Localidad=@localidad,Ambito=@ambito,Ruta=@ruta,Folio=@folio WHERE idServicioSocio=@id",
+                        P("@id",id),P("@barrio",cambio.idBarrio),P("@direccion",direccion),P("@localidad",localidad),P("@ambito",cambio.Ambito),P("@ruta",ruta.Length==0?null:ruta),P("@folio",folio.Length==0?null:folio));
                     var nuevo=db.Database.SqlQuery<Ubicacion>("SELECT * FROM dbo.UbicacionServicio WHERE idServicioSocio=@id",P("@id",id)).Single();
                     Auditar("UbicacionServicio",id,anterior==null?"Asignar":"Actualizar",motivo,anterior,nuevo);
                     tx.Commit(); return Ok(nuevo);

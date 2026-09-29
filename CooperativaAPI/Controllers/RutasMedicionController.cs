@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.Entity;
@@ -264,7 +264,7 @@ namespace CooperativaAPI.Controllers
                         return BadRequest("Este medidor ya fue medido en la hoja de ruta.");
                     }
 
-                    var medidor = db.Medidores.FirstOrDefault(m => m.idMedidor == idMedidor && m.Activo);
+                    var medidor = db.Medidores.FirstOrDefault(m => m.idMedidor == idMedidor && m.Activo && m.idServicioSocio != null);
                     if (medidor == null)
                     {
                         transaction.Rollback();
@@ -284,6 +284,8 @@ namespace CooperativaAPI.Controllers
                         .Select(m => (decimal?)m.ValorLectura)
                         .FirstOrDefault() ?? 0;
 
+                    var baseInstalacion = db.Database.SqlQuery<decimal?>("SELECT LecturaInicial FROM dbo.AsignacionMedidor WHERE idMedidor=@id AND Cerrada=0",new System.Data.SqlClient.SqlParameter("@id",idMedidor)).SingleOrDefault();
+                    ultimaLectura = Math.Max(ultimaLectura,baseInstalacion ?? 0);
                     if (request.LecturaActual < ultimaLectura)
                     {
                         transaction.Rollback();
@@ -293,7 +295,7 @@ namespace CooperativaAPI.Controllers
                     var fechaLectura = request.FechaLectura.HasValue ? request.FechaLectura.Value.Date : DateTime.Today;
                     var medicion = new Medicion
                     {
-                        idServicioSocio = medidor.idServicioSocio,
+                        idServicioSocio = medidor.idServicioSocio.Value,
                         idEmpleado = request.IdEmpleado,
                         idMedidor = idMedidor,
                         idTipoLectura = request.IdTipoLectura,
@@ -518,11 +520,19 @@ namespace CooperativaAPI.Controllers
             };
         }
 
+        public class ContextoHistoricoRuta {
+            public int? idSocio { get; set; }
+            public string SocioNombre { get; set; }
+            public string Documento { get; set; }
+            public string ServicioNombre { get; set; }
+            public string NumeroMedidor { get; set; }
+        }
         private RutaMedicionDetalleDto MapDetalle(RutaMedicionDetalle detalle, IDictionary<int, Medidor> medidores)
         {
             Medidor medidor;
             medidores.TryGetValue(detalle.idMedidor, out medidor);
             var servicioSocio = medidor?.ServicioSocio;
+            var contexto = db.Database.SqlQuery<ContextoHistoricoRuta>("SELECT * FROM dbo.ContextoRutaMedidor WHERE idRutaMedicionDetalle=@id", new System.Data.SqlClient.SqlParameter("@id",detalle.idRutaMedicionDetalle)).SingleOrDefault();
 
             return new RutaMedicionDetalleDto
             {
@@ -537,11 +547,11 @@ namespace CooperativaAPI.Controllers
                 latitud = detalle.Latitud,
                 longitud = detalle.Longitud,
                 fotoMedidorUrl = detalle.FotoMedidorUrl,
-                numeroMedidor = medidor?.Numero,
-                idSocio = servicioSocio?.idSocio,
-                socioNombre = NombrePersona(servicioSocio?.Socio?.Persona),
-                socioDocumento = servicioSocio?.Socio?.Persona?.Documento,
-                servicioNombre = servicioSocio?.Servicio?.Nombre,
+                numeroMedidor = contexto?.NumeroMedidor ?? medidor?.Numero,
+                idSocio = contexto?.idSocio ?? servicioSocio?.idSocio,
+                socioNombre = contexto?.SocioNombre ?? NombrePersona(servicioSocio?.Socio?.Persona),
+                socioDocumento = contexto?.Documento ?? servicioSocio?.Socio?.Persona?.Documento,
+                servicioNombre = contexto?.ServicioNombre ?? servicioSocio?.Servicio?.Nombre,
                 tipoMedidor = medidor?.TipoMedidor?.Nombre,
                 medidorActivo = medidor?.Activo ?? false
             };

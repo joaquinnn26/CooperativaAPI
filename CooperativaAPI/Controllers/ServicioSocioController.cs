@@ -35,6 +35,12 @@ namespace CooperativaAPI.Controllers
                         return BadRequest("La seleccion contiene servicios inexistentes.");
 
                     var actuales = db.ServicioSocio.Where(ss => ss.idSocio == idSocio).ToList();
+                    if(actuales.GroupBy(s=>s.idServicio).Any(g=>g.Count()>1))
+                    {
+                        if(new HashSet<int>(actuales.Where(s=>s.Activo==true).Select(s=>s.idServicio)).SetEquals(idsSeleccionados))
+                        { trans.Commit(); return Ok("Las conexiones existentes se conservaron sin cambios."); }
+                        return BadRequest("El socio tiene varias conexiones del mismo servicio. No se puede modificar su estado mediante una selección global de servicios.");
+                    }
                     foreach (var actual in actuales)
                         actual.Activo = idsSeleccionados.Contains(actual.idServicio);
 
