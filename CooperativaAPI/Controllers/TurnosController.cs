@@ -28,7 +28,7 @@ namespace CooperativaAPI.Controllers
 
         [HttpGet]
         [Route("disponibilidad")]
-        [JwtAuthorize(Roles = "Administrador,Socio")]
+        [JwtAuthorize(Roles = "Administrador,Socio,Empleado")]
         public IHttpActionResult ObtenerDisponibilidad(string desde = null, int dias = 12)
         {
             try
@@ -85,14 +85,22 @@ namespace CooperativaAPI.Controllers
 
         [HttpPost]
         [Route("")]
-        [JwtAuthorize(Roles = "Socio")]
+        [JwtAuthorize(Roles = "Socio,Empleado,Administrador")]
         public IHttpActionResult CrearTurno([FromBody] CrearTurnoRequest request)
         {
             try
             {
                 var idSocioActual = ObtenerClaimEntero("idSocio");
-                if (!idSocioActual.HasValue) return Unauthorized();
-                if (request != null) request.IdSocio = idSocioActual.Value;
+                if(User.IsInRole("Socio")) {
+                    if (!idSocioActual.HasValue) return Unauthorized();
+                    if (request != null) request.IdSocio = idSocioActual.Value;
+                } else {
+                    using(var laboral=new CooperativaEntities()) {
+                        if(!LaboralAccess.Atencion(laboral,(ClaimsPrincipal)User)) return StatusCode(HttpStatusCode.Forbidden);
+                        if(request==null || !request.IdSocio.HasValue || !laboral.Socio.Any(x=>x.idSocio==request.IdSocio && x.Activo==true))return BadRequest("Seleccioná un socio activo.");
+                    }
+                    if(!new[]{"Telefono","Ventanilla"}.Contains(request.Canal))return BadRequest("Seleccioná el canal de atención.");
+                }
 
                 DateTime fecha;
                 TimeSpan hora;
@@ -134,6 +142,7 @@ VALUES
                             idTurno = Convert.ToInt32(command.ExecuteScalar());
                         }
 
+                        AuditarTurno(connection,transaction,idTurno,null,"Pendiente","RecibirTurno",User.IsInRole("Socio")?"App":request.Canal);
                         transaction.Commit();
                     }
                 }
@@ -148,7 +157,7 @@ VALUES
 
         [HttpGet]
         [Route("socio/{idSocio:int}")]
-        [JwtAuthorize(Roles = "Administrador,Socio")]
+        [JwtAuthorize(Roles = "Administrador,Socio,Empleado")]
         public IHttpActionResult ObtenerTurnosPorSocio(int idSocio)
         {
             try
@@ -175,7 +184,7 @@ ORDER BY t.Fecha DESC, t.Hora DESC;", connection))
 
         [HttpPut]
         [Route("{idTurno:int}/cancelar")]
-        [JwtAuthorize(Roles = "Administrador,Socio")]
+        [JwtAuthorize(Roles = "Administrador,Socio,Empleado")]
         public IHttpActionResult CancelarTurno(int idTurno)
         {
             try
@@ -310,14 +319,14 @@ WHERE IdTurno = @IdTurno;", connection, transaction))
         }
         [HttpDelete]
         [Route("~/api/admin/turnos/{idTurno:int}")]
-        [JwtAuthorize(Roles = "Administrador")]
+        [JwtAuthorize(Roles = "Administrador,Empleado")]
         public IHttpActionResult EliminarTurnoAdmin(int idTurno)
         {
             return CancelarTurno(idTurno);
         }
         [HttpGet]
         [Route("~/api/admin/turnos")]
-        [JwtAuthorize(Roles = "Administrador")]
+        [JwtAuthorize(Roles = "Administrador,Empleado")]
         public IHttpActionResult ObtenerTurnosAdmin()
         {
             try
@@ -341,7 +350,7 @@ ORDER BY
 
         [HttpPut]
         [Route("~/api/admin/turnos/{idTurno:int}")]
-        [JwtAuthorize(Roles = "Administrador")]
+        [JwtAuthorize(Roles = "Administrador,Empleado")]
         public IHttpActionResult ActualizarTurnoAdmin(int idTurno, [FromBody] ActualizarTurnoAdminRequest request)
         {
             try
@@ -371,6 +380,14 @@ ORDER BY
                             return Content(HttpStatusCode.Conflict, "La transicion de estado del turno no es valida.");
                         }
 
+                        if (estadoId.Value == 4) {
+                            using(var motivo = new SqlCommand("SELECT Nombre FROM dbo.MotivoLaboral WHERE idMotivo=@id AND Area='ADMINISTRACION' AND Accion='Rechazar' AND Activo=1",connection,transaction)) {
+                                motivo.Parameters.AddWithValue("@id",(object)request.idMotivo??DBNull.Value);
+                                var nombre=motivo.ExecuteScalar() as string;
+                                if(nombre==null)return BadRequest("Seleccioná un motivo vigente de rechazo.");
+                                request.ObservacionAdmin=nombre;
+                            }
+                        }
                         if (estadoId.Value == 2)
                         {
                             string mensaje;
@@ -413,6 +430,8 @@ ORDER BY
                             ActualizarEstadoSimple(connection, transaction, idTurno, estadoId.Value, request);
                         }
 
+                        if(estadoId.Value==4 && string.IsNullOrWhiteSpace(request.ObservacionAdmin))return BadRequest("Indicá el motivo del rechazo.");
+                        AuditarTurno(connection,transaction,idTurno,turno.IdEstadoTurno.ToString(),estadoId.Value.ToString(),"DecidirTurno",request.ObservacionAdmin);
                         transaction.Commit();
                     }
                 }
@@ -425,6 +444,12 @@ ORDER BY
             }
         }
 
+        private void AuditarTurno(SqlConnection c,SqlTransaction tx,int id,string antes,string despues,string accion,string motivo) {
+            using(var cmd=new SqlCommand(@"INSERT dbo.AuditoriaLaboral(Area,idUsuarioSistema,idEmpleado,Accion,EstadoAnterior,EstadoNuevo,Motivo,Datos) VALUES('ADMINISTRACION',@u,@e,@a,@antes,@nuevo,@motivo,@datos)",c,tx)) {
+                cmd.Parameters.AddWithValue("@u",ObtenerClaimEntero("idUsuarioSistema"));cmd.Parameters.AddWithValue("@e",(object)ObtenerClaimEntero("idEmpleado")??DBNull.Value);
+                cmd.Parameters.AddWithValue("@a",accion);cmd.Parameters.AddWithValue("@antes",(object)antes??DBNull.Value);cmd.Parameters.AddWithValue("@nuevo",(object)despues??DBNull.Value);cmd.Parameters.AddWithValue("@motivo",(object)motivo??DBNull.Value);cmd.Parameters.AddWithValue("@datos",Newtonsoft.Json.JsonConvert.SerializeObject(new{idTurno=id}));cmd.ExecuteNonQuery();
+            }
+        }
         private const string QueryTurnosBase = @"
 SELECT
     t.IdTurno,
@@ -982,6 +1007,7 @@ WHERE IdTurno = @IdTurno;", connection, transaction))
 
     public class CrearTurnoRequest
     {
+        public string Canal { get; set; }
         public int? IdSocio { get; set; }
         public string SocioNombre { get; set; }
         public string SocioDocumento { get; set; }
@@ -992,6 +1018,7 @@ WHERE IdTurno = @IdTurno;", connection, transaction))
 
     public class ActualizarTurnoAdminRequest
     {
+        public int? idMotivo { get; set; }
         public int? EstadoId { get; set; }
         public int? IdEstadoTurno { get; set; }
         public string Estado { get; set; }

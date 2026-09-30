@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <edmx:Edmx Version="3.0" xmlns:edmx="http://schemas.microsoft.com/ado/2009/11/edmx">
   <!-- EF Runtime content -->
   <edmx:Runtime>
@@ -310,7 +310,7 @@
           <Property Name="Usuario" Type="varchar" MaxLength="50" Nullable="false" />
           <Property Name="Contrasenia" Type="varchar" MaxLength="255" Nullable="false" />
           <Property Name="idRol" Type="int" Nullable="false" />
-          <Property Name="idSocio" Type="int" Nullable="false" />
+          <Property Name="idSocio" Type="int" Nullable="true" />
           <Property Name="idEmpleado" Type="int" />
         </EntityType>
         <Association Name="FK__Empleado__idCarg__403A8C7D">
@@ -446,7 +446,7 @@
           </ReferentialConstraint>
         </Association>
         <Association Name="FK__UsuarioSi__idSoc__5BE2A6F2">
-          <End Role="Socio" Type="Self.Socio" Multiplicity="1" />
+          <End Role="Socio" Type="Self.Socio" Multiplicity="0..1" />
           <End Role="UsuarioSistema" Type="Self.UsuarioSistema" Multiplicity="*" />
           <ReferentialConstraint>
             <Principal Role="Socio">
@@ -758,7 +758,7 @@
           </ReferentialConstraint>
         </Association>
         <Association Name="FK_UsuarioSistema_Socio">
-          <End Role="Socio" Type="Self.Socio" Multiplicity="1" />
+          <End Role="Socio" Type="Self.Socio" Multiplicity="0..1" />
           <End Role="UsuarioSistema" Type="Self.UsuarioSistema" Multiplicity="*" />
           <ReferentialConstraint>
             <Principal Role="Socio">
@@ -770,7 +770,7 @@
           </ReferentialConstraint>
         </Association>
         <Association Name="FK_UsuarioSistema_Socios">
-          <End Role="Socio" Type="Self.Socio" Multiplicity="1">
+          <End Role="Socio" Type="Self.Socio" Multiplicity="0..1">
             <OnDelete Action="Cascade" />
           </End>
           <End Role="UsuarioSistema" Type="Self.UsuarioSistema" Multiplicity="*" />
@@ -1159,7 +1159,7 @@
           <Property Name="Usuario" Type="String" MaxLength="50" FixedLength="false" Unicode="false" Nullable="false" />
           <Property Name="Contrasenia" Type="String" MaxLength="255" FixedLength="false" Unicode="false" Nullable="false" />
           <Property Name="idRol" Type="Int32" Nullable="false" />
-          <Property Name="idSocio" Type="Int32" Nullable="false" />
+          <Property Name="idSocio" Type="Int32" Nullable="true" />
           <Property Name="idEmpleado" Type="Int32" />
           <NavigationProperty Name="Empleado" Relationship="Self.FK__UsuarioSi__idEmp__5CD6CB2B" FromRole="UsuarioSistema" ToRole="Empleado" />
           <NavigationProperty Name="Rol" Relationship="Self.FK__UsuarioSi__idRol__5AEE82B9" FromRole="UsuarioSistema" ToRole="Rol" />
@@ -1527,7 +1527,7 @@
           <Property Type="Int32" Name="OwnerID" Nullable="false" />
         </ComplexType>
         <Association Name="FK_UsuarioSistema_Socios">
-          <End Type="CooperativaModel.Socio" Role="Socio" Multiplicity="1">
+          <End Type="CooperativaModel.Socio" Role="Socio" Multiplicity="0..1">
             <OnDelete Action="Cascade" />
           </End>
           <End Type="CooperativaModel.UsuarioSistema" Role="UsuarioSistema" Multiplicity="*" />

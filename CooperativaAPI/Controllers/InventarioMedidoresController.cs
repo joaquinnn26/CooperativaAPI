@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Data;
 using System.Data.SqlClient;
 using System.Linq;
@@ -127,9 +127,7 @@ namespace CooperativaAPI.Controllers
         }
         public static int Usuario(ClaimsPrincipal user) { return int.Parse(user.FindFirst("idUsuarioSistema").Value); }
         public static bool PuedeOperar(CooperativaEntities db,ClaimsPrincipal user) {
-            if(user.IsInRole("Administrador")) return true;
-            int id;
-            return int.TryParse(user.FindFirst("idEmpleado")?.Value,out id) && db.Empleado.Any(e=>e.idEmpleado==id && e.Activo==true && e.Cargo.NombreCargo=="Tecnico");
+            return user.IsInRole("Administrador") || LaboralAccess.Perfil(db,user).Any(a=>new[]{"AGUA","ENERGIA"}.Contains(a.Area) && (a.Encargado || a.Funciones.Contains("OPERARIO")));
         }
         public static FichaMedidorDto Ejecutar(CooperativaEntities db,ClaimsPrincipal user,int? id,OperacionMedidor op,string motivoAccion=null,Guid? operacionId=null) {
             if(op==null) throw new ArgumentException("Indicá los datos de la operación.");
@@ -251,6 +249,10 @@ namespace CooperativaAPI.Controllers
             else if(estado=="Instalados") where+=" AND m.idAsignacion IS NOT NULL";
             else if(estado=="Revision") where+=" AND m.EstadoFisico<>'BajaDefinitiva' AND (m.IdentidadVerificada=0 OR m.EstadoFisico<>'Operativo' OR m.PendienteConciliacion=1)";
             else if(estado=="Baja") where+=" AND m.EstadoFisico='BajaDefinitiva'";
+            if(!Principal.IsInRole("Administrador")) {
+                var e=LaboralAccess.Empleado(db,Principal).GetValueOrDefault();
+                where+=" AND EXISTS(SELECT 1 FROM dbo.EmpleadoArea ea WHERE ea.idEmpleado="+e+" AND ea.HastaUtc IS NULL AND ea.Area=CASE WHEN m.Tipo='Agua' THEN 'AGUA' ELSE 'ENERGIA' END AND (m.idAsignacion IS NULL OR EXISTS(SELECT 1 FROM dbo.EncargadoArea ca WHERE ca.Area=ea.Area AND ca.idEmpleado=ea.idEmpleado AND ca.HastaUtc IS NULL) OR EXISTS(SELECT 1 FROM dbo.TareaLaboral ta WHERE ta.idEmpleadoAsignado=ea.idEmpleado AND ta.idServicioSocio=m.idServicioSocio AND ta.Estado NOT IN ('Cerrada','Rechazada'))))";
+            }
             var from=" FROM ("+OperacionesMedidor.SelectFicha+") m"+where;
             Func<SqlParameter[]> parameters=()=>new[]{OperacionesMedidor.P("@q",OperacionesMedidor.Texto(q)),OperacionesMedidor.P("@tipo",tipo),OperacionesMedidor.P("@exacto",exacto),OperacionesMedidor.P("@offset",(pagina-1)*25)};
             var items=db.Database.SqlQuery<FichaMedidorDto>("SELECT m.*"+from+" ORDER BY m.idMedidor DESC OFFSET @offset ROWS FETCH NEXT 25 ROWS ONLY",parameters()).ToList();
@@ -259,6 +261,7 @@ namespace CooperativaAPI.Controllers
         }
         [HttpGet,Route("conexiones")]
         public IHttpActionResult Conexiones(int pagina=1,string q="") {
+            if(!Principal.IsInRole("Administrador"))return StatusCode(HttpStatusCode.Forbidden);
             if(!OperacionesMedidor.PuedeOperar(db,Principal)) return StatusCode(HttpStatusCode.Forbidden);
             if(pagina<1 || pagina>100000 || (q??"").Length>100) return BadRequest("Filtros inválidos.");
             var from=@" FROM dbo.ServicioSocio s JOIN dbo.Socio so ON so.idSocio=s.idSocio JOIN dbo.Persona p ON p.idPersona=so.idPersona
@@ -271,6 +274,10 @@ namespace CooperativaAPI.Controllers
         public IHttpActionResult Detalle(int id) {
             if(!OperacionesMedidor.PuedeOperar(db,Principal)) return StatusCode(HttpStatusCode.Forbidden);
             var ficha=OperacionesMedidor.Ficha(db,id); if(ficha==null) return NotFound();
+            if(!Principal.IsInRole("Administrador")) {
+                var e=LaboralAccess.Empleado(db,Principal);var a=LaboralAccess.AreaMedidor(db,id);
+                if(!LaboralAccess.Miembro(db,e,a) || (ficha.idAsignacion.HasValue && !LaboralAccess.Encargado(db,e,a) && !db.Database.SqlQuery<int>("SELECT 1 FROM dbo.TareaLaboral WHERE idEmpleadoAsignado=@e AND idServicioSocio=@c",OperacionesMedidor.P("@e",e),OperacionesMedidor.P("@c",ficha.idServicioSocio)).Any()))return StatusCode(HttpStatusCode.Forbidden);
+            }
             var eventos=db.Database.SqlQuery<EventoMedidorDto>(@"SELECT e.*,u.Usuario Responsable,mot.Accion MotivoAccion,
                 (SELECT TOP 1 otro.idMedidor FROM dbo.EventoMedidor otro WHERE otro.OperacionId=e.OperacionId AND otro.idMedidor<>e.idMedidor ORDER BY otro.idEvento) OtroMedidorId,
                 (SELECT TOP 1 m.Numero FROM dbo.EventoMedidor otro JOIN dbo.Medidor m ON m.idMedidor=otro.idMedidor WHERE otro.OperacionId=e.OperacionId AND otro.idMedidor<>e.idMedidor ORDER BY otro.idEvento) OtroMedidorNumero
@@ -322,8 +329,13 @@ namespace CooperativaAPI.Controllers
         private IHttpActionResult Guardar(int? id,OperacionMedidor op) {
             if(!OperacionesMedidor.PuedeOperar(db,Principal)) return StatusCode(HttpStatusCode.Forbidden);
             if(!ModelState.IsValid) return BadRequest("Datos inválidos.");
+            if(op!=null && new[]{"Instalar","Retirar"}.Contains(op.Accion))return StatusCode(HttpStatusCode.Forbidden);
+            if(id.HasValue && op!=null && new[]{"Falla","Revision","Reparacion"}.Contains(op.Accion) && !LaboralAccess.Encargado(db,LaboralAccess.Empleado(db,Principal),LaboralAccess.AreaMedidor(db,id.Value)))return StatusCode(HttpStatusCode.Forbidden);
+            if(!Principal.IsInRole("Administrador")) {
+                if(!id.HasValue || !LaboralAccess.Encargado(db,LaboralAccess.Empleado(db,Principal),LaboralAccess.AreaMedidor(db,id.Value)))return StatusCode(HttpStatusCode.Forbidden);
+            }
             using(var tx=db.Database.BeginTransaction(IsolationLevel.Serializable)) {
-                try { var ficha=OperacionesMedidor.Ejecutar(db,Principal,id,op); tx.Commit(); return Ok(ficha); }
+                try { var ficha=OperacionesMedidor.Ejecutar(db,Principal,id,op); LaboralAccess.Auditar(db,Principal,LaboralAccess.AreaMedidor(db,ficha.idMedidor),null,"Medidor"+op.Accion,null,ficha.EstadoFisico,op.Detalle,new{ficha.idMedidor}); tx.Commit(); return Ok(ficha); }
                 catch(ArgumentException ex) { return BadRequest(ex.Message); }
                 catch(DBConcurrencyException ex) { return Content(HttpStatusCode.Conflict,ex.Message); }
                 catch(UnauthorizedAccessException) { return StatusCode(HttpStatusCode.Forbidden); }

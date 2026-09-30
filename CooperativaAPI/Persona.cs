@@ -9,6 +9,15 @@
 
 namespace CooperativaAPI
 {
+    public partial class Persona
+    {
+        [System.ComponentModel.DataAnnotations.Schema.NotMapped]
+        public bool? EsTitular { get; set; }
+    }
+}
+
+namespace CooperativaAPI
+{
     using System;
     using System.Collections.Generic;
     

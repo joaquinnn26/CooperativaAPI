@@ -32,11 +32,12 @@ namespace CooperativaAPI.Controllers
 
             try
             {
-                var usuario = db.UsuarioSistema
-                    .Include(u => u.Rol)
-                    .Include(u => u.Socio2.Persona)
-                    .Include(u => u.Empleado.Cargo)
-                    .FirstOrDefault(u => u.Socio2.Persona.Email == request.Email);
+                var candidatos = db.UsuarioSistema.Include(u=>u.Rol).Include(u=>u.Socio2.Persona).Include(u=>u.Empleado.Persona).Include(u=>u.Empleado.Cargo)
+                    .Where(u => u.Socio2.Persona.Email==request.Email || u.Empleado.Persona.Email==request.Email || (u.Rol.NombreRol=="Administrador" && u.Usuario==request.Email));
+                if(!string.IsNullOrWhiteSpace(request.TipoAcceso)) candidatos=candidatos.Where(u=>u.Rol.NombreRol==request.TipoAcceso);
+                var cuentas=candidatos.ToList();
+                if(cuentas.Count>1)return BadRequest("Elegí acceso personal, laboral o administración del sistema.");
+                var usuario=cuentas.SingleOrDefault();
 
                 if (usuario == null)
                     return Unauthorized();
@@ -55,14 +56,14 @@ namespace CooperativaAPI.Controllers
                     db.SaveChanges();
                 }
 
-                if (usuario.idEmpleado.HasValue && usuario.Empleado != null && usuario.Empleado.Activo == false)
+                if (usuario.Rol.NombreRol != "Socio" && usuario.idEmpleado.HasValue && usuario.Empleado != null && usuario.Empleado.Activo != true)
                     return BadRequest("El empleado se encuentra inactivo.");
-                if (usuario.Socio2 != null && usuario.Socio2.Activo == false)
+                if (usuario.Rol.NombreRol == "Socio" && (usuario.Socio2 == null || usuario.Socio2.Activo != true))
                     return BadRequest("El socio se encuentra inactivo.");
 
                 string token = JwtHelper.GenerarToken(usuario);
 
-                var persona = usuario.Socio2?.Persona;
+                var persona = usuario.Rol.NombreRol=="Socio" ? usuario.Socio2?.Persona : usuario.Empleado?.Persona ?? usuario.Socio2?.Persona;
                 var cargo = usuario.Empleado?.Cargo?.NombreCargo;
 
                 return Ok(new
@@ -73,9 +74,11 @@ namespace CooperativaAPI.Controllers
                     nombre = persona != null ? (persona.Nombre + " " + persona.Apellido).Trim() : usuario.Usuario,
                     email = persona?.Email,
                     rol = usuario.Rol?.NombreRol,
-                    idSocio = usuario.idSocio,
-                    idEmpleado = usuario.idEmpleado,
-                    cargo = cargo
+                    idSocio = usuario.Rol.NombreRol=="Socio" ? usuario.idSocio : null,
+                    idEmpleado = usuario.Rol.NombreRol=="Socio" ? null : usuario.idEmpleado,
+                    cargo = cargo,
+                    altaSocio = usuario.Rol.NombreRol == "Socio" ? ObtenerEstadoAlta(usuario.idSocio) : null,
+                    areas = LaboralAccess.Perfil(db,(ClaimsPrincipal)new ClaimsPrincipal(new ClaimsIdentity(new[]{new Claim("idUsuarioSistema",usuario.idUsuarioSistema.ToString())})))
                 });
             }
             catch (Exception)
@@ -126,15 +129,16 @@ namespace CooperativaAPI.Controllers
                 .Include(u => u.Rol)
                 .Include(u => u.Socio2.Persona)
                 .Include(u => u.Empleado.Cargo)
+                    .Include(u => u.Empleado.Persona)
                 .FirstOrDefault(u => u.idUsuarioSistema == idUsuario.Value);
 
             if (usuario == null) return Unauthorized();
-            if (usuario.Socio2 != null && usuario.Socio2.Activo == false)
+            if (usuario.Rol.NombreRol == "Socio" && (usuario.Socio2 == null || usuario.Socio2.Activo != true))
                 return Content(System.Net.HttpStatusCode.Forbidden, "El socio se encuentra inactivo.");
-            if (usuario.Empleado != null && usuario.Empleado.Activo == false)
+            if (usuario.Rol.NombreRol != "Socio" && usuario.Empleado != null && usuario.Empleado.Activo != true)
                 return Content(System.Net.HttpStatusCode.Forbidden, "El empleado se encuentra inactivo.");
 
-            var persona = usuario.Socio2?.Persona;
+            var persona = usuario.Rol.NombreRol=="Socio" ? usuario.Socio2?.Persona : usuario.Empleado?.Persona ?? usuario.Socio2?.Persona;
             return Ok(new
             {
                 usuario = usuario.Usuario,
@@ -143,9 +147,11 @@ namespace CooperativaAPI.Controllers
                     : usuario.Usuario,
                 email = persona?.Email,
                 rol = usuario.Rol?.NombreRol,
-                idSocio = usuario.idSocio,
-                idEmpleado = usuario.idEmpleado,
-                cargo = usuario.Empleado?.Cargo?.NombreCargo
+                idSocio = usuario.Rol.NombreRol=="Socio" ? usuario.idSocio : null,
+                idEmpleado = usuario.Rol.NombreRol=="Socio" ? null : usuario.idEmpleado,
+                cargo = usuario.Empleado?.Cargo?.NombreCargo,
+                altaSocio = usuario.Rol.NombreRol == "Socio" ? ObtenerEstadoAlta(usuario.idSocio) : null,
+                areas = LaboralAccess.Perfil(db,(ClaimsPrincipal)User)
             });
         }
 
@@ -159,7 +165,7 @@ namespace CooperativaAPI.Controllers
 
             var usuario = db.UsuarioSistema
                 .Include(u => u.Socio2.Persona)
-                .FirstOrDefault(u => u.Socio2.Persona.Email.ToLower() == email);
+                .Where(u => (u.Socio2.Persona.Email.ToLower()==email || u.Empleado.Persona.Email.ToLower()==email || (u.Rol.NombreRol=="Administrador" && u.Usuario.ToLower()==email)) && u.Rol.NombreRol==request.TipoAcceso).SingleOrDefault();
 
             if (usuario != null)
             {
@@ -226,6 +232,21 @@ namespace CooperativaAPI.Controllers
             return int.TryParse(identity?.FindFirst(tipo)?.Value, out value) ? value : (int?)null;
         }
 
+        private object ObtenerEstadoAlta(int? idSocio)
+        {
+            if (!idSocio.HasValue) return null;
+            return db.Database.SqlQuery<EstadoAltaSesion>(@"SELECT a.Estado,m.Nombre Motivo,m.Codigo MotivoCodigo,a.Version
+                FROM dbo.AltaSocio a LEFT JOIN dbo.MotivoRechazoAltaSocio m ON m.idMotivo=a.idMotivoRechazo WHERE a.idSocio=@p0", idSocio.Value).FirstOrDefault();
+        }
+
+        private sealed class EstadoAltaSesion
+        {
+            public string Estado { get; set; }
+            public string Motivo { get; set; }
+            public string MotivoCodigo { get; set; }
+            public byte[] Version { get; set; }
+        }
+
         private static string ValidarPassword(string password)
         {
             if (string.IsNullOrWhiteSpace(password) || password.Length < 8)
@@ -290,6 +311,7 @@ namespace CooperativaAPI.Controllers
 
     public class RecuperarContrasenaRequest
     {
+        public string TipoAcceso { get; set; } = "Socio";
         public string Email { get; set; }
     }
 

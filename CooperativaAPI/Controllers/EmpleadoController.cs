@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Web.Http;
 using System.Security.Claims;
@@ -74,23 +74,25 @@ namespace CooperativaAPI.Controllers
 			{
 				try
 				{
-					int idSocio = data.idSocio;
+					int? idSocio = (int?)data.idSocio;
+                    int? idPersona = (int?)data.idPersona;
 					int idCargo = data.idCargo;
 					DateTime fechaInicio = data.FechaDeInicio;
 
-					var socio = db.Socio.Find(idSocio);
+					var socio = idSocio.HasValue?db.Socio.Find(idSocio.Value):null;
+                    var persona=db.Persona.Find(idPersona??socio?.idPersona);
 
-					if (socio == null)
-						return BadRequest("Socio no encontrado.");
+					if (persona == null)
+						return BadRequest("Persona no encontrada.");
 
-					bool yaEsEmpleado = db.Empleado.Any(e => e.idPersona == socio.idPersona);
+					bool yaEsEmpleado = db.Empleado.Any(e => e.idPersona == persona.idPersona);
 
 					if (yaEsEmpleado)
 						return BadRequest("La persona ya es empleado.");
 
 					var empleado = new Empleado
 					{
-						idPersona = socio.idPersona,
+						idPersona = persona.idPersona,
 						idCargo = idCargo,
 						FechaDelInicio = fechaInicio,
 						Activo = true
@@ -104,13 +106,10 @@ namespace CooperativaAPI.Controllers
 					if (rolEmpleado == null)
 						return BadRequest("No existe el rol Empleado.");
 
-					var usuario = db.UsuarioSistema.FirstOrDefault(u => u.idSocio == socio.idSocio);
-
-					if (usuario == null)
-						return BadRequest("El socio no tiene usuario.");
-
-					usuario.idEmpleado = empleado.idEmpleado;
-					usuario.idRol = rolEmpleado.idRol;
+                    string password=(string)data.PasswordLaboral;
+                    if(string.IsNullOrWhiteSpace(password) || password.Length<8 || password.Length>100 || !password.Any(char.IsUpper) || !password.Any(char.IsLower) || !password.Any(char.IsDigit) || !password.Any(c=>!char.IsLetterOrDigit(c))) return BadRequest("La contraseña laboral debe tener al menos 8 caracteres, mayúscula, minúscula, número y símbolo.");
+                    db.UsuarioSistema.Add(new UsuarioSistema {Usuario="laboral-"+empleado.idEmpleado,Contrasenia=CooperativaAPI.Helpers.PasswordHelpers.Hashear(password),idRol=rolEmpleado.idRol,idSocio=null,idEmpleado=empleado.idEmpleado});
+                    LaboralAccess.Auditar(db,(ClaimsPrincipal)User,null,null,"AltaEmpleado",null,"Activo","Alta laboral con cuenta independiente",new{empleado.idEmpleado,empleado.idPersona,empleado.idCargo});
 
 					db.SaveChanges();
 					trans.Commit();
@@ -133,6 +132,7 @@ namespace CooperativaAPI.Controllers
 		[JwtAuthorize(Roles = "Administrador")]
 		public IHttpActionResult Actualizar(int id, dynamic data)
 		{
+            using(var trans=db.Database.BeginTransaction()) {
 			try
 			{
 				var empleado = db.Empleado.Find(id);
@@ -146,8 +146,10 @@ namespace CooperativaAPI.Controllers
 				if (!cargoExiste)
 					return BadRequest("El cargo seleccionado no existe.");
 
-				empleado.idCargo = idCargo;
+				LaboralAccess.Auditar(db,(ClaimsPrincipal)User,null,null,"CambiarCargo",empleado.idCargo.ToString(),idCargo.ToString(),"Cambio de cargo",new{empleado.idEmpleado});
+                empleado.idCargo = idCargo;
 				db.SaveChanges();
+                trans.Commit();
 
 				return Ok(new
 				{
@@ -162,6 +164,7 @@ namespace CooperativaAPI.Controllers
 			{
 				return BadRequest(ex.Message);
 			}
+            }
 		}
 		[HttpDelete]
 		[Route("{id:int}")]
@@ -179,15 +182,8 @@ namespace CooperativaAPI.Controllers
 
 					empleado.Activo = false;
 
-					var usuario = db.UsuarioSistema.FirstOrDefault(u => u.idEmpleado == empleado.idEmpleado);
-					if (usuario != null)
-					{
-						usuario.idEmpleado = null;
-
-						var rolSocio = db.Rol.FirstOrDefault(r => r.NombreRol == "Socio");
-						if (rolSocio != null)
-							usuario.idRol = rolSocio.idRol;
-					}
+                    LaboralAccess.Auditar(db,(ClaimsPrincipal)User,null,null,"BajaEmpleado","Activo","Inactivo","Baja del acceso laboral",new{empleado.idEmpleado});
+                    db.Database.ExecuteSqlCommand("UPDATE dbo.EncargadoArea SET HastaUtc=SYSUTCDATETIME() WHERE idEmpleado=@id AND HastaUtc IS NULL; UPDATE dbo.EmpleadoArea SET HastaUtc=SYSUTCDATETIME() WHERE idEmpleado=@id AND HastaUtc IS NULL",LaboralAccess.P("@id",id));
 
 					db.SaveChanges();
 					trans.Commit();
@@ -209,6 +205,7 @@ namespace CooperativaAPI.Controllers
 		[JwtAuthorize(Roles = "Administrador")]
 		public IHttpActionResult CambiarEstado(int id)
 		{
+            using(var trans=db.Database.BeginTransaction()) {
 			try
 			{
 				var empleado = db.Empleado.Find(id);
@@ -217,7 +214,10 @@ namespace CooperativaAPI.Controllers
 					return NotFound();
 
 				empleado.Activo = !empleado.Activo;
+                if(empleado.Activo!=true) db.Database.ExecuteSqlCommand("UPDATE dbo.EncargadoArea SET HastaUtc=SYSUTCDATETIME() WHERE idEmpleado=@id AND HastaUtc IS NULL; UPDATE dbo.EmpleadoArea SET HastaUtc=SYSUTCDATETIME() WHERE idEmpleado=@id AND HastaUtc IS NULL",LaboralAccess.P("@id",id));
+                LaboralAccess.Auditar(db,(ClaimsPrincipal)User,null,null,"EstadoEmpleado",null,empleado.Activo==true?"Activo":"Inactivo","Cambio de acceso laboral",new{empleado.idEmpleado});
 				db.SaveChanges();
+                trans.Commit();
 
 				return Ok("Estado actualizado.");
 			}
@@ -225,6 +225,7 @@ namespace CooperativaAPI.Controllers
 			{
 				return BadRequest(ex.Message);
 			}
+            }
 		}
 
 		private int? ObtenerClaimEntero(string tipo)

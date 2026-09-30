@@ -16,7 +16,7 @@ namespace CooperativaAPI.Controllers
 
         [HttpGet]
         [Route("socio/{idSocio:int}")]
-        [JwtAuthorize(Roles = "Administrador,Socio")]
+        [JwtAuthorize(Roles = "Administrador,Socio,Empleado")]
         public IHttpActionResult GetReclamosPorSocio(int idSocio)
         {
             try
@@ -41,7 +41,7 @@ namespace CooperativaAPI.Controllers
 
         [HttpGet]
         [Route("tipoReclamo")]
-        [JwtAuthorize(Roles = "Administrador,Socio")]
+        [JwtAuthorize(Roles = "Administrador,Socio,Empleado")]
         public IHttpActionResult GetTipoReclamo()
         {
             try
@@ -86,7 +86,7 @@ namespace CooperativaAPI.Controllers
 
         [HttpPost]
         [Route("")]
-        [JwtAuthorize(Roles = "Socio")]
+        [JwtAuthorize(Roles = "Socio,Empleado,Administrador")]
         public IHttpActionResult Crear([FromBody] Reclamo nuevo)
         {
             try
@@ -95,8 +95,9 @@ namespace CooperativaAPI.Controllers
                     return ValidationError("No se recibio ningun reclamo.");
 
                 var idSocioActual = ObtenerClaimEntero("idSocio");
-                if (!idSocioActual.HasValue) return Unauthorized();
-                nuevo.idSocio = idSocioActual.Value;
+                if (User.IsInRole("Socio") && !idSocioActual.HasValue) return Unauthorized();
+                if(User.IsInRole("Socio")) nuevo.idSocio = idSocioActual.Value;
+                else if(!LaboralAccess.Atencion(db,(ClaimsPrincipal)User))return StatusCode(HttpStatusCode.Forbidden);
 
                 nuevo.Descripcion = Limpiar(nuevo.Descripcion);
                 if (nuevo.Descripcion.Length < 10 || nuevo.Descripcion.Length > 800 || !TieneLetra(nuevo.Descripcion))

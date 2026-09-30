@@ -85,14 +85,27 @@ namespace CooperativaAPI.Filters
                     if (usuario == null ||
                         string.IsNullOrWhiteSpace(rolActual) ||
                         !string.Equals(rolToken, rolActual, StringComparison.OrdinalIgnoreCase) ||
-                        (usuario.Socio2 != null && usuario.Socio2.Activo == false) ||
-                        (usuario.Empleado != null && usuario.Empleado.Activo == false))
+                        (rolActual=="Socio" && (usuario.Socio2==null || usuario.Socio2.Activo!=true)) ||
+                        (rolActual!="Socio" && usuario.Empleado!=null && usuario.Empleado.Activo!=true) || (rolActual=="Empleado" && usuario.Empleado==null))
                     {
                         actionContext.Response = request.CreateResponse(HttpStatusCode.Unauthorized);
                         return;
                     }
                 }
 
+                using(var permisos=new CooperativaEntities()) {
+                    // El vínculo del token también debe coincidir con la cuenta actual.
+                    var actual=permisos.UsuarioSistema.Find(idUsuario);
+                    int tokenEmployee,tokenSocio;
+                    var e=identity.FindFirst("idEmpleado")?.Value; var s=identity.FindFirst("idSocio")?.Value;
+                    if((!string.IsNullOrEmpty(e) && (!int.TryParse(e,out tokenEmployee) || actual.idEmpleado!=tokenEmployee || actual.Rol.NombreRol=="Socio")) ||
+                       (!string.IsNullOrEmpty(s) && (!int.TryParse(s,out tokenSocio) || actual.idSocio!=tokenSocio))) {
+                        actionContext.Response=request.CreateResponse(HttpStatusCode.Unauthorized); return;
+                    }
+                    if(!CooperativaAPI.Controllers.LaboralAccess.LegacyGate(permisos,principal,actionContext.ControllerContext.ControllerDescriptor.ControllerName,actionContext.ActionDescriptor.ActionName,request.Method.Method)) {
+                        actionContext.Response=request.CreateResponse(HttpStatusCode.Forbidden,new {message="Esta operación requiere el flujo laboral y la autorización del área correspondiente."}); return;
+                    }
+                }
                 if (!string.IsNullOrWhiteSpace(Roles))
                 {
                     var rolesPermitidos = Roles

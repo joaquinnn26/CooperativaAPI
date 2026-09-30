@@ -81,6 +81,7 @@ namespace CooperativaAPI.Controllers
 
             var error = ValidarPersona(persona);
             if (error != null) return ValidationError(error);
+            if (!persona.EsTitular.HasValue) return ValidationError("Indicá si sos titular del domicilio.");
 
             using (var trans = db.Database.BeginTransaction())
             {
@@ -121,6 +122,10 @@ namespace CooperativaAPI.Controllers
 
                     db.UsuarioSistema.Add(usuario);
                     db.SaveChanges();
+
+                    db.Database.ExecuteSqlCommand("INSERT dbo.AltaSocio(idSocio,EsTitular,Estado) VALUES(@socio,@titular,'PendienteDocumentacion')",
+                        new System.Data.SqlClient.SqlParameter("@socio", socio.idSocio),
+                        new System.Data.SqlClient.SqlParameter("@titular", persona.EsTitular.Value));
 
                     trans.Commit();
 
