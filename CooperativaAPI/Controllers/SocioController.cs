@@ -74,15 +74,19 @@ namespace CooperativaAPI.Controllers
         [HttpPost]
         [Route("")]
         [AllowAnonymous]
-        public IHttpActionResult Crear([FromBody] Persona persona)
+        public IHttpActionResult Crear([FromBody] RegistroSocioRequest request)
         {
+            var persona = request == null ? null : new Persona {
+                Nombre=request.Nombre, Apellido=request.Apellido, Documento=request.Documento,
+                Email=request.Email, Telefono=request.Telefono, Calle=request.Calle, Numero=request.Numero
+            };
             if (persona == null)
                 return ValidationError("Los datos del socio son obligatorios.");
 
             var error = ValidarPersona(persona);
             if (error != null) return ValidationError(error);
 
-            using (var trans = db.Database.BeginTransaction())
+            using (var trans = db.Database.BeginTransaction(System.Data.IsolationLevel.Serializable))
             {
                 try
                 {
@@ -92,6 +96,9 @@ namespace CooperativaAPI.Controllers
                     if (personaExiste)
                         return Content(HttpStatusCode.Conflict, "Ya existe una persona registrada con este documento.");
 
+                    if (db.Persona.Any(p => p.Email == persona.Email))
+                        return Content(HttpStatusCode.Conflict, "Ya existe una cuenta con ese correo.");
+
                     db.Persona.Add(persona);
                     db.SaveChanges();
 
@@ -99,7 +106,7 @@ namespace CooperativaAPI.Controllers
                     {
                         idPersona = persona.idPersona,
                         FechaAlta = DateTime.Now,
-                        Activo = true
+                        Activo = false
                     };
                     db.Socio.Add(socio);
                     db.SaveChanges();
@@ -109,7 +116,7 @@ namespace CooperativaAPI.Controllers
                         return BadRequest("No existe un rol 'Socio'.");
 
                     string passwordTemporal = Guid.NewGuid().ToString().Substring(0, 8);
-                    string passwordHasheada = HashPassword(passwordTemporal);
+                    string passwordHasheada = CooperativaAPI.Helpers.PasswordHelpers.Hashear(passwordTemporal);
 
                     var usuario = new UsuarioSistema
                     {
@@ -122,11 +129,15 @@ namespace CooperativaAPI.Controllers
                     db.UsuarioSistema.Add(usuario);
                     db.SaveChanges();
 
+                    db.Database.ExecuteSqlCommand(
+                        "INSERT dbo.AltaSocio(idUsuarioSistema,EsTitular) VALUES(@id,@titular)",
+                        new System.Data.SqlClient.SqlParameter("@id", usuario.idUsuarioSistema),
+                        new System.Data.SqlClient.SqlParameter("@titular", request.EsTitular));
                     trans.Commit();
 
                     return Ok(new
                     {
-                        mensaje = "Socio y usuario creados correctamente.",
+                        mensaje = "Cuenta creada. Presentá la documentación para solicitar el alta de socio.",
                         usuario = usuario.Usuario,
                         idSocio = socio.idSocio,
                         passwordTemporal = passwordTemporal
@@ -235,6 +246,8 @@ namespace CooperativaAPI.Controllers
                 var socio = db.Socio.Find(id);
                 if (socio == null) return NotFound();
 
+                if (db.Database.SqlQuery<int>("SELECT COUNT(*) FROM dbo.AltaSocio a JOIN dbo.UsuarioSistema u ON u.idUsuarioSistema=a.idUsuarioSistema WHERE u.idSocio=@id AND a.Estado <> 'Aprobada'", new System.Data.SqlClient.SqlParameter("@id", id)).Single() > 0)
+                    return Content(HttpStatusCode.Conflict, "El alta debe aprobarse desde la revisión de documentación.");
                 socio.Activo = !socio.Activo;
                 db.SaveChanges();
 

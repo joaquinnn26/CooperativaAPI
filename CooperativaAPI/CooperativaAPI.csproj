@@ -513,4 +513,11 @@
   <ItemGroup>
     <Content Include="Data\20260928_FlujoMedidores.sql" />
   </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Controllers\AltaSocioController.cs" />
+    <Content Include="Data\20260929_AltaSocio.sql" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="Data\20260929_ObservacionRechazo.sql" />
+  </ItemGroup>
 </Project>

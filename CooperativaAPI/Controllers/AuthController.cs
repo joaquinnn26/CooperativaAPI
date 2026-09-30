@@ -57,7 +57,7 @@ namespace CooperativaAPI.Controllers
 
                 if (usuario.idEmpleado.HasValue && usuario.Empleado != null && usuario.Empleado.Activo == false)
                     return BadRequest("El empleado se encuentra inactivo.");
-                if (usuario.Socio2 != null && usuario.Socio2.Activo == false)
+                if (usuario.Socio2 != null && usuario.Socio2.Activo == false && !AltaSocioAcceso.Pendiente(db, usuario))
                     return BadRequest("El socio se encuentra inactivo.");
 
                 string token = JwtHelper.GenerarToken(usuario);
@@ -75,6 +75,7 @@ namespace CooperativaAPI.Controllers
                     rol = usuario.Rol?.NombreRol,
                     idSocio = usuario.idSocio,
                     idEmpleado = usuario.idEmpleado,
+                    altaSocio = AltaSocioAcceso.Obtener(db, usuario.idUsuarioSistema),
                     cargo = cargo
                 });
             }
@@ -129,7 +130,7 @@ namespace CooperativaAPI.Controllers
                 .FirstOrDefault(u => u.idUsuarioSistema == idUsuario.Value);
 
             if (usuario == null) return Unauthorized();
-            if (usuario.Socio2 != null && usuario.Socio2.Activo == false)
+            if (usuario.Socio2 != null && usuario.Socio2.Activo == false && !AltaSocioAcceso.Pendiente(db, usuario))
                 return Content(System.Net.HttpStatusCode.Forbidden, "El socio se encuentra inactivo.");
             if (usuario.Empleado != null && usuario.Empleado.Activo == false)
                 return Content(System.Net.HttpStatusCode.Forbidden, "El empleado se encuentra inactivo.");
@@ -145,6 +146,7 @@ namespace CooperativaAPI.Controllers
                 rol = usuario.Rol?.NombreRol,
                 idSocio = usuario.idSocio,
                 idEmpleado = usuario.idEmpleado,
+                altaSocio = AltaSocioAcceso.Obtener(db, usuario.idUsuarioSistema),
                 cargo = usuario.Empleado?.Cargo?.NombreCargo
             });
         }

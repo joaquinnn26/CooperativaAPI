@@ -82,14 +82,26 @@ namespace CooperativaAPI.Filters
                     var rolToken = identity.FindFirst(ClaimTypes.Role)?.Value;
                     var rolActual = usuario?.Rol?.NombreRol;
 
+                    var altaPendiente = usuario != null && usuario.Rol != null && CooperativaAPI.Controllers.AltaSocioAcceso.Pendiente(db, usuario);
                     if (usuario == null ||
                         string.IsNullOrWhiteSpace(rolActual) ||
                         !string.Equals(rolToken, rolActual, StringComparison.OrdinalIgnoreCase) ||
-                        (usuario.Socio2 != null && usuario.Socio2.Activo == false) ||
+                        (usuario.Socio2 != null && usuario.Socio2.Activo == false && !altaPendiente) ||
                         (usuario.Empleado != null && usuario.Empleado.Activo == false))
                     {
                         actionContext.Response = request.CreateResponse(HttpStatusCode.Unauthorized);
                         return;
+                    }
+                    if (altaPendiente)
+                    {
+                        var controller = actionContext.ControllerContext.ControllerDescriptor.ControllerName;
+                        var action = actionContext.ActionDescriptor.ActionName;
+                        var permitido = controller == "AltaSocio" || (controller == "Auth" && (action == "ObtenerSesion" || action == "CambiarContrasena"));
+                        if (!permitido)
+                        {
+                            actionContext.Response = request.CreateResponse(HttpStatusCode.Forbidden, new { Message = "Tu alta de socio está pendiente. Completá la documentación y esperá la aprobación." });
+                            return;
+                        }
                     }
                 }
 
