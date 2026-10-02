@@ -30,26 +30,17 @@ namespace CooperativaAPI.Controllers {
   public IHttpActionResult DescargarEvidencia(int id){
    var file=Rows("SELECT * FROM dbo.EvidenciaLaboral WHERE idEvidencia=@id",P("@id",id)).SingleOrDefault();if(file==null)return NotFound();if(!PuedeVer(Task((int)file["idTarea"])))return StatusCode(HttpStatusCode.Forbidden);return Descargar((byte[])file["Contenido"],(string)file["Nombre"],(string)file["Tipo"]);
   }
-  [HttpGet,Route("documentos/tipos")]
-  public IHttpActionResult TiposDocumento(){return Read(()=>Rows("SELECT * FROM dbo.TipoDocumentoSocio WHERE Activo=1 ORDER BY Nombre"));}
-  [HttpGet,Route("documentos")]
-  public IHttpActionResult Documentos(){return Read(()=>{
-   Exigir(User.IsInRole("Socio"));int socio=int.Parse(Principal.FindFirst("idSocio").Value);
-   return Rows("SELECT d.idDocumento,d.Nombre,d.FechaUtc,d.Estado,d.Motivo,t.Nombre Requisito FROM dbo.DocumentoSocioLaboral d JOIN dbo.TipoDocumentoSocio t ON t.idTipoDocumento=d.idTipoDocumento WHERE d.idSocio=@s ORDER BY d.idDocumento DESC",P("@s",socio));
-  });}
-  [HttpPost,Route("documentos")]
-  public IHttpActionResult SubirDocumento(JObject data){return Write(()=>{
-   Exigir(User.IsInRole("Socio"));int socio=int.Parse(Principal.FindFirst("idSocio").Value);int tipoId=(int?)data["idTipoDocumento"]??0;
-   var requisito=Row("SELECT * FROM dbo.TipoDocumentoSocio WHERE idTipoDocumento=@id AND Activo=1",P("@id",tipoId));string nombre,tipo;var bytes=Archivo(data,out nombre,out tipo);
-   int id=db.Database.SqlQuery<int>("INSERT dbo.DocumentoSocioLaboral(idSocio,idTipoDocumento,Nombre,Tipo,Contenido) OUTPUT INSERTED.idDocumento VALUES(@s,@t,@n,@tipo,@b)",P("@s",socio),P("@t",tipoId),P("@n",nombre),P("@tipo",tipo),P("@b",bytes)).Single();
-   int task=CrearTarea("ADMINISTRACION","Documentacion",id,socio,null,"Revisar documento: "+(string)requisito["Nombre"]);Audit("ADMINISTRACION",task,"RecibirDocumento",null,"PendienteAsignacion",nombre,new{idDocumento=id});return new{idDocumento=id};
-  });}
+  // Ruta de compatibilidad: lee el archivo compartido en DocumentoPersona.
   [HttpGet,Route("documentos/{id:int}")]
   public IHttpActionResult DescargarDocumento(int id){
-   var file=Rows("SELECT * FROM dbo.DocumentoSocioLaboral WHERE idDocumento=@id",P("@id",id)).SingleOrDefault();if(file==null)return NotFound();
-   bool personal=User.IsInRole("Socio") && Principal.FindFirst("idSocio")?.Value==file["idSocio"].ToString();
+   var file=Rows("SELECT * FROM dbo.DocumentoPersona WHERE idDocumentoPersona=@id",P("@id",id)).SingleOrDefault();if(file==null)return NotFound();
+   int usuario=LaboralAccess.Usuario(Principal),persona=(int)file["idPersona"];
+   bool personal=Rows(@"SELECT 1 Permitido FROM dbo.UsuarioSistema u
+    LEFT JOIN dbo.Socio s ON s.idSocio=u.idSocio LEFT JOIN dbo.Empleado e ON e.idEmpleado=u.idEmpleado
+    WHERE u.idUsuarioSistema=@u AND COALESCE(s.idPersona,e.idPersona)=@p",P("@u",usuario),P("@p",persona)).Any();
    var task=Rows("SELECT * FROM dbo.TareaLaboral WHERE Categoria='Documentacion' AND OrigenId=@id",P("@id",id)).SingleOrDefault();
-   if(!personal && (task==null || !PuedeVer(task)))return StatusCode(HttpStatusCode.Forbidden);return Descargar((byte[])file["Contenido"],(string)file["Nombre"],(string)file["Tipo"]);
+   if(!personal && (!User.IsInRole("Administrador") && (task==null || !PuedeVer(task))))return StatusCode(HttpStatusCode.Forbidden);
+   return Descargar((byte[])file["Contenido"],(string)file["NombreArchivo"],(string)file["TipoArchivo"]);
   }
   [HttpGet,Route("documentos-solicitud/{id:int}")]
   public IHttpActionResult DescargarDocumentoSolicitud(int id){

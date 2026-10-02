@@ -251,11 +251,14 @@ namespace CooperativaAPI.Controllers
                 if (estadoActual != "en revision" && estadoActual != "pendiente")
                     return BadRequest("Solo se pueden rechazar solicitudes pendientes o en revision.");
 
-                var motivo = Convert.ToString(data?.motivo)?.Trim();
-                if (string.IsNullOrWhiteSpace(motivo))
-                    return BadRequest("El motivo de rechazo es obligatorio.");
-                if (motivo.Length > 500)
-                    return BadRequest("El motivo de rechazo no puede superar 500 caracteres.");
+                int? idMotivo=(int?)data?.idMotivoEvento;
+                var motivo=db.Database.SqlQuery<MotivoEventoOperativoDto>(@"SELECT idMotivoEvento,Contexto,Codigo,Nombre,Activo,ConfirmadoCooperativa,RequiereDetalle
+                    FROM dbo.MotivoEventoOperativo WHERE idMotivoEvento=@id AND Contexto='SOLICITUD_SERVICIO_RECHAZO' AND Activo=1 AND ConfirmadoCooperativa=1",
+                    new System.Data.SqlClient.SqlParameter("@id",(object)idMotivo??DBNull.Value)).SingleOrDefault();
+                if (motivo==null) return BadRequest("Seleccioná un motivo confirmado para rechazar la solicitud.");
+                var servicioSolicitado=db.Servicio.Find(solicitud.idServicio);
+                if(motivo.Codigo=="ENERGIA_REQUISITO_PILAR" && (servicioSolicitado==null || !OperacionesMedidor.Normalizar(servicioSolicitado.Nombre).Contains("luz") && !OperacionesMedidor.Normalizar(servicioSolicitado.Nombre).Contains("electric")))
+                    return BadRequest("El motivo de requisitos del pilar solo corresponde a solicitudes de Energía.");
 
                 var estado = db.EstadoSolicitudServicio
                     .FirstOrDefault(e => e.NombreEstado == "Rechazada");
@@ -263,11 +266,21 @@ namespace CooperativaAPI.Controllers
                 if (estado == null)
                     return BadRequest("No existe el estado Rechazada.");
 
-                solicitud.idEstadoSolicitud = estado.idEstadoSolicitud;
-                solicitud.MotivoRechazo = motivo;
-                solicitud.FechaResolucion = DateTime.Now;
-
-                db.SaveChanges();
+                using(var tx=db.Database.BeginTransaction(System.Data.IsolationLevel.Serializable)) {
+                    var anterior=solicitud.EstadoSolicitudServicio?.NombreEstado;
+                    solicitud.idEstadoSolicitud = estado.idEstadoSolicitud;
+                    solicitud.MotivoRechazo = motivo.Nombre;
+                    solicitud.FechaResolucion = DateTime.Now;
+                    db.HistorialEstadoSolicitud.Add(new HistorialEstadoSolicitud { idSolicitudServicio=solicitud.idSolicitudServicio,idEstadoSolicitud=estado.idEstadoSolicitud,idEmpleado=ObtenerClaimEntero("idEmpleado"),FechaCambio=DateTime.Now,Observaciones=motivo.Nombre });
+                    db.SaveChanges();
+                    var area=LaboralAccess.AreaServicio(db,solicitud.idServicio);
+                    EventoOperativoStore.Registrar(db,(ClaimsPrincipal)User,new EventoOperativoNuevo {
+                        Contexto="SOLICITUD_SERVICIO_RECHAZO",CodigoEvento="SolicitudRechazada",Entidad="SolicitudServicio",idEntidad=id.ToString(),Area=area,
+                        idSocio=solicitud.idSocio,idServicio=solicitud.idServicio,EstadoAnterior=anterior,EstadoNuevo=estado.NombreEstado,
+                        idMotivoEvento=idMotivo,MotivoRequerido=true,Resultado="Rechazada",MotivoNombre=motivo.Nombre
+                    });
+                    tx.Commit();
+                }
 
                 return Ok("Solicitud rechazada.");
             }
@@ -326,6 +339,7 @@ namespace CooperativaAPI.Controllers
                     var observaciones = ObtenerObservaciones(data);
                     bool medidorCreado = false;
                     string numeroMedidor = null;
+                    var operacionInstalacion=Guid.NewGuid();
 
                     var servicioSocio = ObtenerOCrearServicioSocio(solicitud.idSocio, solicitud.idServicio, solicitud.idSolicitudServicio);
                     if(ServicioRequiereMedidor(servicio.Nombre)) {
@@ -334,7 +348,7 @@ namespace CooperativaAPI.Controllers
                         if(op==null) return BadRequest("Elegí un medidor disponible o registrá el equipo nuevo.");
                         op.Fecha=DateTimeOffset.UtcNow;
                         medidorCreado=op.NuevoMedidor!=null;
-                        var ficha=OperacionesMedidor.Colocar(db,(System.Security.Claims.ClaimsPrincipal)User,op,servicioSocio.idServicioSocio,"Instalar",Guid.NewGuid());
+                        var ficha=OperacionesMedidor.Colocar(db,(System.Security.Claims.ClaimsPrincipal)User,op,servicioSocio.idServicioSocio,"Instalar",operacionInstalacion);
                         numeroMedidor=ficha.Numero;
                     }
 
@@ -355,6 +369,12 @@ namespace CooperativaAPI.Controllers
                     });
 
                     db.SaveChanges();
+                    EventoOperativoStore.Registrar(db,(ClaimsPrincipal)User,new EventoOperativoNuevo {
+                        Contexto="SOLICITUD_SERVICIO_INSTALACION",CodigoEvento="InstalacionRealizada",Entidad="SolicitudServicio",idEntidad=id.ToString(),
+                        Area=LaboralAccess.AreaServicio(db,solicitud.idServicio),idSocio=solicitud.idSocio,idServicio=solicitud.idServicio,idServicioSocio=servicioSocio.idServicioSocio,
+                        EstadoAnterior="Pendiente instalacion",EstadoNuevo="Aprobada",Resultado="InstalacionRealizada",OperacionId=operacionInstalacion,
+                        Datos=new{solicitud.idSolicitudServicio,servicioSocio.idServicioSocio,medidorCreado,numeroMedidor}
+                    });
                     trans.Commit();
 
                     return Ok(new
@@ -409,17 +429,17 @@ namespace CooperativaAPI.Controllers
                     if (estadoActual != "pendiente instalacion")
                         return BadRequest("Solo se pueden rechazar instalaciones pendientes.");
 
-                    var motivo = ObtenerMotivo(data);
-                    if (string.IsNullOrWhiteSpace(motivo))
-                        return BadRequest("El motivo es obligatorio.");
-                    if (motivo.Length > 500)
-                        return BadRequest("El motivo no puede superar 500 caracteres.");
+                    int? idMotivo=(int?)data?.idMotivoEvento;
+                    var motivo=db.Database.SqlQuery<MotivoEventoOperativoDto>(@"SELECT idMotivoEvento,Contexto,Codigo,Nombre,Activo,ConfirmadoCooperativa,RequiereDetalle
+                        FROM dbo.MotivoEventoOperativo WHERE idMotivoEvento=@id AND Contexto='INSTALACION_NO_REALIZADA' AND Activo=1 AND ConfirmadoCooperativa=1",
+                        new System.Data.SqlClient.SqlParameter("@id",(object)idMotivo??DBNull.Value)).SingleOrDefault();
+                    if(motivo==null)return BadRequest("Seleccioná un motivo confirmado para la instalación no realizada.");
 
                     var estadoEnRevision = ObtenerOCrearEstadoSolicitud("En Revision");
                     solicitud.idEstadoSolicitud = estadoEnRevision.idEstadoSolicitud;
                     solicitud.idEmpleadoRevisor = idEmpleadoActual;
                     solicitud.FechaResolucion = null;
-                    solicitud.MotivoRechazo = motivo;
+                    solicitud.MotivoRechazo = motivo.Nombre;
 
                     db.HistorialEstadoSolicitud.Add(new HistorialEstadoSolicitud
                     {
@@ -427,10 +447,16 @@ namespace CooperativaAPI.Controllers
                         idEstadoSolicitud = estadoEnRevision.idEstadoSolicitud,
                         idEmpleado = idEmpleadoActual,
                         FechaCambio = DateTime.Now,
-                        Observaciones = "Instalacion rechazada: " + motivo
+                        Observaciones = "Instalacion no realizada: " + motivo.Nombre
                     });
 
                     db.SaveChanges();
+                    var area=LaboralAccess.AreaServicio(db,solicitud.idServicio);
+                    EventoOperativoStore.Registrar(db,(ClaimsPrincipal)User,new EventoOperativoNuevo {
+                        Contexto="INSTALACION_NO_REALIZADA",CodigoEvento="InstalacionNoRealizada",Entidad="SolicitudServicio",idEntidad=id.ToString(),Area=area,
+                        idSocio=solicitud.idSocio,idServicio=solicitud.idServicio,EstadoAnterior="Pendiente instalacion",EstadoNuevo=estadoEnRevision.NombreEstado,
+                        idMotivoEvento=idMotivo,MotivoRequerido=true,Resultado="DevueltaParaRevision",MotivoNombre=motivo.Nombre
+                    });
                     trans.Commit();
 
                     return Ok(new
@@ -438,7 +464,7 @@ namespace CooperativaAPI.Controllers
                         mensaje = "Instalacion rechazada. La solicitud vuelve a revision.",
                         solicitud.idSolicitudServicio,
                         estado = estadoEnRevision.NombreEstado,
-                        motivo = motivo
+                        motivo = motivo.Nombre
                     });
                 }
                 catch (Exception ex)

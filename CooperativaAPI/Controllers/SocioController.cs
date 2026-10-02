@@ -2,13 +2,12 @@
 using System.Linq;
 using System.Net;
 using System.Security.Claims;
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.RegularExpressions;
 using System.Web.Http;
 using System.Data.Entity;
 using CooperativaAPI.Data;
 using CooperativaAPI.Filters;
+using CooperativaAPI.Helpers;
 
 namespace CooperativaAPI.Controllers
 {
@@ -83,7 +82,7 @@ namespace CooperativaAPI.Controllers
             if (error != null) return ValidationError(error);
             if (!persona.EsTitular.HasValue) return ValidationError("Indicá si sos titular del domicilio.");
 
-            using (var trans = db.Database.BeginTransaction())
+            using (var trans = db.Database.BeginTransaction(System.Data.IsolationLevel.Serializable))
             {
                 try
                 {
@@ -93,6 +92,9 @@ namespace CooperativaAPI.Controllers
                     if (personaExiste)
                         return Content(HttpStatusCode.Conflict, "Ya existe una persona registrada con este documento.");
 
+                    if (db.Persona.Any(p => p.Email == persona.Email))
+                        return Content(HttpStatusCode.Conflict, "Ya existe una cuenta con ese correo.");
+
                     db.Persona.Add(persona);
                     db.SaveChanges();
 
@@ -100,7 +102,7 @@ namespace CooperativaAPI.Controllers
                     {
                         idPersona = persona.idPersona,
                         FechaAlta = DateTime.Now,
-                        Activo = true
+                        Activo = false
                     };
                     db.Socio.Add(socio);
                     db.SaveChanges();
@@ -110,7 +112,7 @@ namespace CooperativaAPI.Controllers
                         return BadRequest("No existe un rol 'Socio'.");
 
                     string passwordTemporal = Guid.NewGuid().ToString().Substring(0, 8);
-                    string passwordHasheada = HashPassword(passwordTemporal);
+                    string passwordHasheada = PasswordHelpers.Hashear(passwordTemporal);
 
                     var usuario = new UsuarioSistema
                     {
@@ -217,16 +219,6 @@ namespace CooperativaAPI.Controllers
             catch (Exception ex)
             {
                 return BadRequest("Error al dar de baja socio: " + ex.Message);
-            }
-        }
-
-        private string HashPassword(string password)
-        {
-            using (var sha = SHA256.Create())
-            {
-                var bytes = Encoding.UTF8.GetBytes(password);
-                var hash = sha.ComputeHash(bytes);
-                return BitConverter.ToString(hash).Replace("-", "").ToLower();
             }
         }
 

@@ -58,7 +58,6 @@ namespace CooperativaAPI.Controllers {
    encargados=Rows("SELECT * FROM dbo.EncargadoArea ORDER BY idEncargadoArea DESC"),
    servicios=Rows("SELECT s.idServicio,s.Nombre,a.Area FROM dbo.Servicio s LEFT JOIN dbo.AreaServicio a ON a.idServicio=s.idServicio"),
    motivos=Rows("SELECT * FROM dbo.MotivoLaboral ORDER BY Area,Accion,Nombre"),
-   tiposDocumento=Rows("SELECT * FROM dbo.TipoDocumentoSocio ORDER BY Nombre"),
    cuentas=Rows("SELECT u.idUsuarioSistema,u.idEmpleado,u.Usuario FROM dbo.UsuarioSistema u JOIN dbo.Rol r ON r.idRol=u.idRol WHERE r.NombreRol='Empleado'")
   };});}
 
@@ -73,10 +72,6 @@ namespace CooperativaAPI.Controllers {
     if(db.UsuarioSistema.Any(u=>u.idEmpleado==id && u.idRol==rol))throw new ArgumentException("El empleado ya tiene cuenta laboral.");
     db.UsuarioSistema.Add(new UsuarioSistema{Usuario="laboral-"+id,idEmpleado=id,idSocio=null,idRol=rol,Contrasenia=CooperativaAPI.Helpers.PasswordHelpers.Hashear(password)});
     data.Remove("Password");
-   } else if(accion=="DocumentoTipo"){
-    var nombre=Texto(data,"Nombre",100,true);int? id=(int?)data["idTipoDocumento"];
-    if(id.HasValue)db.Database.ExecuteSqlCommand("UPDATE dbo.TipoDocumentoSocio SET Activo=@activo WHERE idTipoDocumento=@id",P("@activo",(bool?)data["Activo"]??false),P("@id",id));
-    else db.Database.ExecuteSqlCommand("INSERT dbo.TipoDocumentoSocio(Nombre) VALUES(@nombre)",P("@nombre",nombre));
    } else {
     var areaRow=Row("SELECT * FROM dbo.AreaLaboral WHERE Codigo=@a",P("@a",area));
     if(accion=="Miembro"){

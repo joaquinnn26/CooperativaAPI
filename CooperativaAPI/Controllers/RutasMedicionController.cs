@@ -31,6 +31,7 @@ namespace CooperativaAPI.Controllers
         [JwtAuthorize(Roles = "Administrador,Empleado")]
         public IHttpActionResult ObtenerTodas()
         {
+            ExpirarRutas();
             try
             {
                 var rutas = QueryRutas()
@@ -53,6 +54,7 @@ namespace CooperativaAPI.Controllers
         [JwtAuthorize(Roles = "Administrador,Empleado")]
         public IHttpActionResult ObtenerPorEmpleado(int idEmpleado)
         {
+            ExpirarRutas();
             try
             {
                 if (User.IsInRole("Empleado") && ObtenerClaimEntero("idEmpleado") != idEmpleado)
@@ -79,6 +81,7 @@ namespace CooperativaAPI.Controllers
         [JwtAuthorize(Roles = "Administrador,Empleado")]
         public IHttpActionResult ObtenerPorId(int idRuta)
         {
+            ExpirarRutas(idRuta);
             using(var permisos=new CooperativaEntities()) { if(!(LaboralAccess.Gerencia(permisos,(ClaimsPrincipal)User) || LaboralAccess.LecturistaRuta(permisos,(ClaimsPrincipal)User,idRuta,false) || LaboralAccess.LecturistaRuta(permisos,(ClaimsPrincipal)User,idRuta,true)))return StatusCode(System.Net.HttpStatusCode.Forbidden); }
 
             try
@@ -131,6 +134,21 @@ namespace CooperativaAPI.Controllers
                         return BadRequest("Hay medidores inexistentes o inactivos: " + string.Join(", ", invalidos));
                     }
 
+                    var ambiguos = medidoresIds.Where(id => db.Database.SqlQuery<int>(@"
+                        SELECT COUNT(*) FROM dbo.AsignacionMedidor a
+                        JOIN dbo.Medidor m ON m.idMedidor=a.idMedidor
+                        WHERE a.idMedidor=@id AND a.Cerrada=0 AND a.PendienteConciliacion=0
+                          AND m.Activo=1 AND m.idServicioSocio=a.idServicioSocio
+                          AND NOT EXISTS (SELECT 1 FROM dbo.AsignacionMedidor p
+                                          WHERE p.idServicioSocio=a.idServicioSocio AND p.Cerrada=0
+                                            AND p.PendienteConciliacion=1)",
+                        new System.Data.SqlClient.SqlParameter("@id", id)).Single() != 1).ToList();
+                    if (ambiguos.Any())
+                    {
+                        transaction.Rollback();
+                        return Content(HttpStatusCode.Conflict, new { message = "Hay medidores con una instalacion pendiente de conciliacion; no se pueden incluir en una ruta hasta verificar fisicamente la conexion.", medidores = ambiguos });
+                    }
+
                     var fecha = request.Fecha.Date;
                     var inicioMes = new DateTime(fecha.Year, fecha.Month, 1);
                     var inicioMesSiguiente = inicioMes.AddMonths(1);
@@ -141,7 +159,8 @@ namespace CooperativaAPI.Controllers
                             medidoresIds.Contains(d.idMedidor) &&
                             d.RutaMedicion.Fecha >= inicioMes &&
                             d.RutaMedicion.Fecha < inicioMesSiguiente &&
-                            d.RutaMedicion.Estado != "Cancelada")
+                            d.Estado == "Pendiente" &&
+                            (d.RutaMedicion.Estado == "Pendiente" || d.RutaMedicion.Estado == "EnCurso"))
                         .Select(d => d.idMedidor)
                         .Distinct()
                         .ToList();
@@ -189,7 +208,7 @@ namespace CooperativaAPI.Controllers
 
                     db.RutasMedicion.Add(ruta);
                     db.SaveChanges();
-                    AuditarRuta(ruta,"AsignarRuta");
+                    AuditarRuta(ruta,"AsignarRuta",null);
                     transaction.Commit();
 
                     return Ok(MapRuta(QueryRutas().First(r => r.idRutaMedicion == ruta.idRutaMedicion)));
@@ -206,6 +225,7 @@ namespace CooperativaAPI.Controllers
         [JwtAuthorize(Roles = "Empleado")]
         public IHttpActionResult Iniciar(int idRuta)
         {
+            ExpirarRutas(idRuta);
             using(var permisos=new CooperativaEntities()) { if(!(LaboralAccess.LecturistaRuta(permisos,(ClaimsPrincipal)User,idRuta,false)))return StatusCode(System.Net.HttpStatusCode.Forbidden); }
 
             try
@@ -217,10 +237,11 @@ namespace CooperativaAPI.Controllers
                     return Content(HttpStatusCode.Forbidden, "La hoja de ruta no pertenece al empleado autenticado.");
                 if (ruta.Estado != "Pendiente") return BadRequest("La hoja de ruta no esta pendiente.");
 
+                var estadoAnterior=ruta.Estado;
                 ruta.Estado = "EnCurso";
                 ruta.FechaInicio = ruta.FechaInicio ?? DateTime.UtcNow;
                 db.SaveChanges();
-                AuditarRuta(ruta,"IniciarRuta");
+                AuditarRuta(ruta,"IniciarRuta",estadoAnterior);
                 transaction.Commit();
 
                 return Ok(MapRuta(QueryRutas().First(r => r.idRutaMedicion == idRuta)));
@@ -237,6 +258,7 @@ namespace CooperativaAPI.Controllers
         [JwtAuthorize(Roles = "Empleado")]
         public IHttpActionResult CargarLectura(int idRuta, int idMedidor, [FromBody] CargarLecturaRutaRequest request)
         {
+            ExpirarRutas(idRuta);
             using(var permisos=new CooperativaEntities()) { if(!(LaboralAccess.LecturistaRuta(permisos,(ClaimsPrincipal)User,idRuta,false)))return StatusCode(System.Net.HttpStatusCode.Forbidden); }
 
             try
@@ -258,7 +280,7 @@ namespace CooperativaAPI.Controllers
                         transaction.Rollback();
                         return NotFound();
                     }
-                    if (ruta.Estado == "Finalizada" || ruta.Estado == "Cancelada")
+                    if (ruta.Estado == "Finalizada" || ruta.Estado == "Cancelada" || ruta.Estado == "TiempoCaducado")
                     {
                         transaction.Rollback();
                         return BadRequest("La hoja de ruta ya esta cerrada.");
@@ -286,6 +308,20 @@ namespace CooperativaAPI.Controllers
                     {
                         transaction.Rollback();
                         return BadRequest("El medidor no existe o esta inactivo.");
+                    }
+                    var asignacionVigente = db.Database.SqlQuery<int>(@"
+                        SELECT COUNT(*) FROM dbo.AsignacionMedidor a
+                        WHERE a.idMedidor=@id AND a.Cerrada=0 AND a.PendienteConciliacion=0
+                          AND a.idServicioSocio=@conexion
+                          AND NOT EXISTS (SELECT 1 FROM dbo.AsignacionMedidor p
+                                          WHERE p.idServicioSocio=a.idServicioSocio AND p.Cerrada=0
+                                            AND p.PendienteConciliacion=1)",
+                        new System.Data.SqlClient.SqlParameter("@id", idMedidor),
+                        new System.Data.SqlClient.SqlParameter("@conexion", medidor.idServicioSocio.Value)).Single();
+                    if (asignacionVigente != 1)
+                    {
+                        transaction.Rollback();
+                        return Content(HttpStatusCode.Conflict, "La instalacion del medidor esta pendiente de conciliacion y no puede recibir lecturas.");
                     }
 
                     if (!db.TiposLectura.Any(t => t.idTipoLectura == request.IdTipoLectura))
@@ -328,6 +364,13 @@ namespace CooperativaAPI.Controllers
 
                     db.Mediciones.Add(medicion);
                     db.SaveChanges();
+                    var conexionLectura=readDb.ServicioSocio.Find(medicion.idServicioSocio);
+                    string areaLectura=LaboralAccess.AreaServicio(readDb,conexionLectura.idServicio);
+                    EventoOperativoStore.Registrar(db,(ClaimsPrincipal)User,new EventoOperativoNuevo {
+                        Contexto="LECTURA_REALIZADA",CodigoEvento="LecturaRealizada",Entidad="Medicion",idEntidad=medicion.idMedicion.ToString(),
+                        Area=areaLectura,idSocio=conexionLectura.idSocio,idServicio=conexionLectura.idServicio,idServicioSocio=medicion.idServicioSocio,idMedidor=idMedidor,idRutaMedicion=idRuta,
+                        EstadoAnterior="Pendiente",EstadoNuevo="Medido",Resultado="LecturaRealizada",Datos=new{medicion.ValorLectura,medicion.ConsumoCalculado,medicion.Periodo,medicion.FechaLectura}
+                    });
 
                     if(!String.IsNullOrWhiteSpace(request.FotoBase64)) {
                         byte[] bytes;try{bytes=Convert.FromBase64String(request.FotoBase64);}catch(FormatException){transaction.Rollback();return BadRequest("La foto adjunta no tiene formato válido.");}
@@ -370,13 +413,13 @@ namespace CooperativaAPI.Controllers
         [JwtAuthorize(Roles = "Empleado")]
         public IHttpActionResult CambiarEstadoDetalle(int idRuta, int idMedidor, [FromBody] CambiarEstadoDetalleRequest request)
         {
+            ExpirarRutas(idRuta);
             using(var permisos=new CooperativaEntities()) { if(!(LaboralAccess.LecturistaRuta(permisos,(ClaimsPrincipal)User,idRuta,false)))return StatusCode(System.Net.HttpStatusCode.Forbidden); }
 
             try
             {
                 using(var transaction=db.Database.BeginTransaction(IsolationLevel.Serializable)) {
-                var estadosValidos = new[] { "Pendiente", "NoAcceso", "MedidorDanado", "Observado" };
-                if (request == null || !estadosValidos.Contains(request.Estado)) return BadRequest("Estado de detalle no valido.");
+                if (request == null || request.Estado!="Pendiente" && (!request.OperacionId.HasValue || request.OperacionId==Guid.Empty)) return BadRequest("Seleccioná un motivo y una clave de operación válidos.");
 
                 var ruta = db.RutasMedicion
                     .Include(r => r.RutaMedicionDetalle)
@@ -384,11 +427,31 @@ namespace CooperativaAPI.Controllers
                 if (ruta == null) return NotFound();
                 if (ObtenerClaimEntero("idEmpleado") != ruta.idEmpleado)
                     return Content(HttpStatusCode.Forbidden, "La hoja de ruta no pertenece al empleado autenticado.");
-                if (ruta.Estado == "Finalizada" || ruta.Estado == "Cancelada") return BadRequest("La hoja de ruta ya esta cerrada.");
+                if (ruta.Estado == "Finalizada" || ruta.Estado == "Cancelada" || ruta.Estado == "TiempoCaducado") return BadRequest("La hoja de ruta ya esta cerrada.");
 
                 var detalle = ruta.RutaMedicionDetalle.FirstOrDefault(d => d.idMedidor == idMedidor);
                 if (detalle == null) return BadRequest("El medidor no pertenece a esta hoja de ruta.");
                 if (detalle.Estado == "Medido") return BadRequest("No se puede cambiar una medicion ya registrada.");
+                if(request.OperacionId.HasValue && db.Database.SqlQuery<int>("SELECT 1 FROM dbo.EventoOperativo WHERE ClaveOrigen=@key",LaboralAccess.P("@key","API:"+request.OperacionId.Value.ToString("N"))).Any()) {
+                    transaction.Commit();
+                    return Ok(MapRuta(QueryRutas().First(r=>r.idRutaMedicion==idRuta)));
+                }
+
+                if (request.Estado == "Pendiente")
+                {
+                    if (request.idMotivoEvento.HasValue) return BadRequest("El estado pendiente no lleva motivo de no lectura.");
+                }
+                else
+                {
+                    var motivo=db.Database.SqlQuery<MotivoEventoOperativoDto>(@"SELECT idMotivoEvento,Contexto,Codigo,Nombre,Activo,ConfirmadoCooperativa,RequiereDetalle
+                        FROM dbo.MotivoEventoOperativo WHERE idMotivoEvento=@id AND Contexto='LECTURA_NO_REALIZADA' AND Activo=1 AND ConfirmadoCooperativa=1",
+                        LaboralAccess.P("@id",request.idMotivoEvento)).SingleOrDefault();
+                    if(motivo==null)return BadRequest("Seleccioná un motivo confirmado para la lectura no realizada.");
+                    if(motivo.Codigo=="MEDIDOR_OBSTRUIDO")request.Estado="NoAcceso";
+                    else if(motivo.Codigo=="MEDIDOR_AVERIADO")request.Estado="MedidorDanado";
+                    else if(motivo.Codigo=="RIESGO_EMPLEADO")request.Estado="Observado";
+                    else return BadRequest("El motivo no es válido para una lectura no realizada.");
+                }
 
                 detalle.Estado = request.Estado;
                 detalle.Observacion = StringOrNull(request.Observacion);
@@ -402,6 +465,19 @@ namespace CooperativaAPI.Controllers
 
                 db.SaveChanges();
                 AuditarRuta(ruta,"IncidenciaRuta");
+                if(request.Estado!="Pendiente") {
+                    var medidor=readDb.Medidor.Find(idMedidor);
+                    var conexion=medidor?.idServicioSocio.HasValue==true?readDb.ServicioSocio.Find(medidor.idServicioSocio.Value):null;
+                    var servicio=conexion==null?null:readDb.Servicio.Find(conexion.idServicio);
+                    var tipo=medidor==null?null:readDb.TipoMedidor.Find(medidor.idTipoMedidor);
+                    var area=tipo!=null && OperacionesMedidor.Normalizar(tipo.Nombre).Contains("agua")?"AGUA":"ENERGIA";
+                    EventoOperativoStore.Registrar(db,(ClaimsPrincipal)User,new EventoOperativoNuevo {
+                        Contexto="LECTURA_NO_REALIZADA",CodigoEvento="LecturaNoRealizada",Entidad="Medidor",idEntidad=idMedidor.ToString(),
+                        Area=area,idSocio=conexion?.idSocio,idServicio=servicio?.idServicio,idServicioSocio=conexion?.idServicioSocio,idMedidor=idMedidor,idRutaMedicion=idRuta,
+                        EstadoAnterior="Pendiente",EstadoNuevo=request.Estado,idMotivoEvento=request.idMotivoEvento,MotivoRequerido=true,
+                        OperacionId=request.OperacionId,ClaveIdempotencia=request.OperacionId.Value.ToString("N"),Resultado="LecturaNoRealizada",Detalle=StringOrNull(request.Observacion),Datos=new{ruta.idRutaMedicion,idMedidor,request.Estado}
+                    });
+                }
                 transaction.Commit();
                 return Ok(MapRuta(QueryRutas().First(r => r.idRutaMedicion == idRuta)));
                 }
@@ -417,6 +493,7 @@ namespace CooperativaAPI.Controllers
         [JwtAuthorize(Roles = "Empleado")]
         public IHttpActionResult Finalizar(int idRuta, [FromBody] FinalizarRutaRequest request)
         {
+            ExpirarRutas(idRuta);
             using(var permisos=new CooperativaEntities()) { if(!(LaboralAccess.LecturistaRuta(permisos,(ClaimsPrincipal)User,idRuta,false)))return StatusCode(System.Net.HttpStatusCode.Forbidden); }
 
             try
@@ -441,6 +518,11 @@ namespace CooperativaAPI.Controllers
                         transaction.Rollback();
                         return Content(HttpStatusCode.Forbidden, "La hoja de ruta no pertenece al empleado autenticado.");
                     }
+                    if (ruta.Estado == "TiempoCaducado")
+                    {
+                        transaction.Rollback();
+                        return Content(HttpStatusCode.Conflict, "La hoja de ruta supero su plazo de 24 horas y ya no puede cerrarse. Cree una nueva hoja con los medidores pendientes.");
+                    }
                     if (ruta.Estado == "Finalizada")
                     {
                         transaction.Rollback();
@@ -457,6 +539,7 @@ namespace CooperativaAPI.Controllers
                         return BadRequest("Hay estados de detalle no resueltos.");
                     }
 
+                    var estadoAnterior=ruta.Estado;
                     ruta.Estado = "Finalizada";
                     ruta.FechaFinalizacion = DateTime.UtcNow;
                     ruta.FirmaDigital = firma.Bytes;
@@ -464,7 +547,7 @@ namespace CooperativaAPI.Controllers
                     if (!string.IsNullOrWhiteSpace(request.Observacion)) ruta.Observacion = request.Observacion.Trim();
 
                     db.SaveChanges();
-                    AuditarRuta(ruta,"FinalizarRuta");
+                    AuditarRuta(ruta,"FinalizarRuta",estadoAnterior);
                     transaction.Commit();
 
                     return Ok(MapRuta(QueryRutas().First(r => r.idRutaMedicion == idRuta)));
@@ -496,6 +579,7 @@ namespace CooperativaAPI.Controllers
         [JwtAuthorize(Roles = "Administrador,Empleado")]
         public IHttpActionResult Cancelar(int idRuta, [FromBody] CancelarRutaRequest request)
         {
+            ExpirarRutas(idRuta);
             using(var permisos=new CooperativaEntities()) { if(!(LaboralAccess.LecturistaRuta(permisos,(ClaimsPrincipal)User,idRuta,true)))return StatusCode(System.Net.HttpStatusCode.Forbidden); }
 
             try
@@ -506,10 +590,11 @@ namespace CooperativaAPI.Controllers
                 if (ruta.Estado != "Pendiente" && ruta.Estado != "EnCurso")
                     return BadRequest("La hoja no se puede cancelar en su estado actual.");
 
+                var estadoAnterior=ruta.Estado;
                 ruta.Estado = "Cancelada";
                 if (!string.IsNullOrWhiteSpace(request?.Observacion)) ruta.Observacion = request.Observacion.Trim();
                 db.SaveChanges();
-                AuditarRuta(ruta,"CancelarRuta");
+                AuditarRuta(ruta,"CancelarRuta",estadoAnterior);
                 transaction.Commit();
 
                 return Ok(MapRuta(QueryRutas().First(r => r.idRutaMedicion == idRuta)));
@@ -521,11 +606,16 @@ namespace CooperativaAPI.Controllers
             }
         }
 
-        private void AuditarRuta(RutaMedicion ruta,string accion) {
+        private void AuditarRuta(RutaMedicion ruta,string accion,string estadoAnterior=null) {
             var area=db.Database.SqlQuery<string>(@"SELECT DISTINCT a.Area FROM dbo.RutaMedicionDetalle d JOIN dbo.ContextoRutaMedidor c ON c.idRutaMedicionDetalle=d.idRutaMedicionDetalle JOIN dbo.Servicio se ON se.Nombre=c.ServicioNombre JOIN dbo.AreaServicio a ON a.idServicio=se.idServicio WHERE d.idRutaMedicion=@id",LaboralAccess.P("@id",ruta.idRutaMedicion)).Single();
             int? task=null;
             if(accion=="FinalizarRuta") task=db.Database.SqlQuery<int>(@"INSERT dbo.TareaLaboral(Area,Categoria,OrigenId,idEmpleadoAsignado,Titulo,Estado,Resultado) OUTPUT INSERTED.idTarea VALUES(@a,'Ruta',@id,@e,@titulo,'EnRevision',@resultado)",LaboralAccess.P("@a",area),LaboralAccess.P("@id",ruta.idRutaMedicion),LaboralAccess.P("@e",ruta.idEmpleado),LaboralAccess.P("@titulo","Revisar hoja: "+ruta.Nombre),LaboralAccess.P("@resultado",ruta.Observacion??"Recorrido finalizado. Revisar lecturas e incidencias.")).Single();
             db.Database.ExecuteSqlCommand(@"INSERT dbo.AuditoriaLaboral(idTarea,Area,idUsuarioSistema,idEmpleado,Accion,EstadoNuevo,Motivo,Datos) VALUES(@t,@a,@u,@e,@accion,@estado,@motivo,@datos)",LaboralAccess.P("@t",task),LaboralAccess.P("@a",area),LaboralAccess.P("@u",LaboralAccess.Usuario((ClaimsPrincipal)User)),LaboralAccess.P("@e",ObtenerClaimEntero("idEmpleado")),LaboralAccess.P("@accion",accion),LaboralAccess.P("@estado",task.HasValue?"EnRevision":ruta.Estado),LaboralAccess.P("@motivo",ruta.Observacion),LaboralAccess.P("@datos",Newtonsoft.Json.JsonConvert.SerializeObject(new{ruta.idRutaMedicion,ruta.idEmpleado})));
+            if(accion!="RegistrarLectura" && accion!="IncidenciaRuta") EventoOperativoStore.Registrar(db,(ClaimsPrincipal)User,new EventoOperativoNuevo {
+                Contexto="HOJA_RUTA",CodigoEvento=accion,Entidad="RutaMedicion",idEntidad=ruta.idRutaMedicion.ToString(),idEmpleado=ruta.idEmpleado,
+                Area=area,idRutaMedicion=ruta.idRutaMedicion,EstadoAnterior=estadoAnterior,EstadoNuevo=ruta.Estado,Resultado=accion,
+                Detalle=ruta.Observacion,Datos=new{ruta.idRutaMedicion,ruta.idEmpleado,ruta.Nombre,ruta.Fecha}
+            });
         }
 
         protected override void Dispose(bool disposing)
@@ -538,8 +628,15 @@ namespace CooperativaAPI.Controllers
             base.Dispose(disposing);
         }
 
+        private void ExpirarRutas(int? idRuta = null)
+        {
+            db.Database.ExecuteSqlCommand("EXEC dbo.ExpirarRutasMedicion @idRutaMedicion",
+                new System.Data.SqlClient.SqlParameter("@idRutaMedicion", (object)idRuta ?? DBNull.Value));
+        }
+
         private IQueryable<RutaMedicion> QueryRutas()
         {
+            ExpirarRutas();
             return db.RutasMedicion
                 .Include(r => r.RutaMedicionDetalle);
         }
@@ -568,6 +665,7 @@ namespace CooperativaAPI.Controllers
                 nombre = ruta.Nombre,
                 fecha = ruta.Fecha.ToString("yyyy-MM-dd"),
                 estado = ruta.Estado,
+                fechaCaducidadUtc = db.Database.SqlQuery<DateTime>("SELECT FechaCaducidadUtc FROM dbo.RutaMedicion WHERE idRutaMedicion=@id", new System.Data.SqlClient.SqlParameter("@id", ruta.idRutaMedicion)).Single(),
                 observacion = ruta.Observacion,
                 creadaEn = FechaIso(ruta.FechaCreacion),
                 iniciadaEn = FechaIso(ruta.FechaInicio),
@@ -718,6 +816,8 @@ namespace CooperativaAPI.Controllers
     public class CambiarEstadoDetalleRequest
     {
         public string Estado { get; set; }
+        public int? idMotivoEvento { get; set; }
+        public Guid? OperacionId { get; set; }
         public string Observacion { get; set; }
     }
 
@@ -743,6 +843,7 @@ namespace CooperativaAPI.Controllers
         public string nombre { get; set; }
         public string fecha { get; set; }
         public string estado { get; set; }
+        public DateTime fechaCaducidadUtc { get; set; }
         public string observacion { get; set; }
         public string creadaEn { get; set; }
         public string iniciadaEn { get; set; }

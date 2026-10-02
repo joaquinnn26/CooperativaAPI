@@ -132,6 +132,7 @@ namespace CooperativaAPI.Controllers
         public static FichaMedidorDto Ejecutar(CooperativaEntities db,ClaimsPrincipal user,int? id,OperacionMedidor op,string motivoAccion=null,Guid? operacionId=null) {
             if(op==null) throw new ArgumentException("Indicá los datos de la operación.");
             var accion=op.Accion;
+            var eventOperationId=operacionId??Guid.NewGuid();
             if(!new[]{"Alta","Verificar","Editar","Instalar","Retirar","Falla","Reparacion","Revision","BajaDefinitiva"}.Contains(accion)) throw new ArgumentException("Acción inválida.");
             if(((accion=="Alta" && motivoAccion==null) || accion=="Editar" || accion=="BajaDefinitiva") && !user.IsInRole("Administrador")) throw new UnauthorizedAccessException();
             if(Texto(op.Detalle).Length>1000 || Texto(op.ReferenciaTrabajo).Length>100) throw new ArgumentException("Detalle o referencia demasiado largos.");
@@ -216,7 +217,17 @@ namespace CooperativaAPI.Controllers
             db.Database.ExecuteSqlCommand(@"INSERT dbo.EventoMedidor(idMedidor,FechaUtc,Accion,idUsuarioSistema,idMotivo,Motivo,Detalle,idAsignacion,ReferenciaTrabajo,Anterior,Nuevo,OperacionId)
                 VALUES(@id,@fecha,@accion,@usuario,@motivoId,@motivo,@detalle,@asignacion,@trabajo,@anterior,@nuevo,@operacion)",
                 P("@id",medidorId),P("@fecha",fecha),P("@accion",accion),P("@usuario",Usuario(user)),P("@motivoId",op.idMotivo),P("@motivo",motivo.Nombre),
-                P("@detalle",Texto(op.Detalle)),P("@asignacion",asignacion),P("@trabajo",Texto(op.ReferenciaTrabajo)),P("@anterior",antes==null?null:JsonConvert.SerializeObject(antes)),P("@nuevo",JsonConvert.SerializeObject(nuevo)),P("@operacion",operacionId));
+                P("@detalle",Texto(op.Detalle)),P("@asignacion",asignacion),P("@trabajo",Texto(op.ReferenciaTrabajo)),P("@anterior",antes==null?null:JsonConvert.SerializeObject(antes)),P("@nuevo",JsonConvert.SerializeObject(nuevo)),P("@operacion",eventOperationId));
+            var conexionEvento=antes?.idServicioSocio??nuevo.idServicioSocio;
+            int? servicioEvento=conexionEvento.HasValue?db.ServicioSocio.Where(s=>s.idServicioSocio==conexionEvento.Value).Select(s=>(int?)s.idServicio).SingleOrDefault():null;
+            var areaEvento=Normalizar(antes?.Tipo??nuevo.Tipo).Contains("agua")?"AGUA":"ENERGIA";
+            var contextoMotive="MEDIDOR_"+(motivoAccion??accion).ToUpperInvariant();
+            EventoOperativoStore.Registrar(db,user,new EventoOperativoNuevo {
+                Contexto=contextoMotive,CodigoEvento=motivoAccion??accion,Entidad="Medidor",idEntidad=medidorId.ToString(),Area=areaEvento,
+                idSocio=antes?.idSocio??nuevo.idSocio,idServicio=servicioEvento,idServicioSocio=conexionEvento,idMedidor=medidorId,
+                EstadoAnterior=antes?.EstadoFisico,EstadoNuevo=nuevo.EstadoFisico,MotivoNombre=motivo.Nombre,MotivoRequerido=true,
+                OperacionId=eventOperationId,Resultado=accion,Detalle=Texto(op.Detalle),Datos=new{operacionId=eventOperationId,accion,motivoAccion,idAsignacion=asignacion,ReferenciaTrabajo=op.ReferenciaTrabajo}
+            });
             return nuevo;
         }
         // Solo se llama dentro de una transacción de instalación o reemplazo autorizada.

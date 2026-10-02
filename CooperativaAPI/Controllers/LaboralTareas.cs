@@ -147,7 +147,7 @@ namespace CooperativaAPI.Controllers {
     if(Rows("SELECT 1 pendiente FROM dbo.TareaLaboral WHERE Categoria='Reclamo' AND OrigenId=@o AND idTarea<>@id AND Estado NOT IN ('Cerrada','Rechazada')",P("@o",origen),P("@id",(int)t["idTarea"])).Any())throw new ArgumentException("El reclamo aún tiene trabajos abiertos en otra área.");
     r.idEstadoReclamo=3;
    } else if(categoria=="Documentacion"){
-    Exigir(area=="ADMINISTRACION");db.Database.ExecuteSqlCommand("UPDATE dbo.DocumentoSocioLaboral SET Estado=@estado,Motivo=@motivo WHERE idDocumento=@id",P("@estado",cerrar?"Aprobado":"Rechazado"),P("@motivo",motivo),P("@id",origen));
+    Exigir(area=="ADMINISTRACION");db.Database.ExecuteSqlCommand("UPDATE dbo.DocumentoPersona SET Estado=@estado,MotivoRechazo=@motivo,FechaRevisionUtc=SYSUTCDATETIME(),idUsuarioRevisor=@usuario WHERE idDocumentoPersona=@id",P("@estado",cerrar?"Aprobado":"Rechazado"),P("@motivo",cerrar?null:motivo),P("@usuario",LaboralAccess.Usuario(Principal)),P("@id",origen));
    } else if(categoria=="Trabajo" && cerrar && !string.IsNullOrEmpty((string)t["DatosResultado"])){
     var datos=JObject.Parse((string)t["DatosResultado"]);string tipo=(string)datos["TipoTrabajo"];
     if(tipo=="Reemplazo" || tipo=="Retiro"){

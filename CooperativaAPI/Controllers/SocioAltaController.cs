@@ -15,6 +15,15 @@ using Newtonsoft.Json.Linq;
 
 namespace CooperativaAPI.Controllers
 {
+    public static class AltaSocioAcceso
+    {
+        public static bool Pendiente(CooperativaEntities db, UsuarioSistema usuario)
+        {
+            if (usuario == null || usuario.Rol == null || usuario.Rol.NombreRol != "Socio" || !usuario.idSocio.HasValue) return false;
+            return db.Database.SqlQuery<int>("SELECT CASE WHEN EXISTS(SELECT 1 FROM dbo.AltaSocio WHERE idSocio=@p0 AND Estado<>'Aprobada') THEN 1 ELSE 0 END", usuario.idSocio.Value).Single() == 1;
+        }
+    }
+
     [RoutePrefix("api/alta-socio"), JwtAuthorize(Roles="Administrador,Socio,Empleado")]
     public class SocioAltaController : ApiController
     {
@@ -176,10 +185,24 @@ namespace CooperativaAPI.Controllers
                     db.Database.ExecuteSqlCommand("UPDATE dbo.AltaSocio SET Estado='Rechazada',idMotivoRechazo=@m,FechaDecisionUtc=SYSUTCDATETIME(),idUsuarioRevisor=@u WHERE idSocio=@s", P("@m", reason), P("@u", UsuarioId), P("@s", socio));
                     db.Database.ExecuteSqlCommand(@"UPDATE d SET Estado='Rechazado',MotivoRechazo=(SELECT Nombre FROM dbo.MotivoRechazoAltaSocio WHERE idMotivo=@m),FechaRevisionUtc=SYSUTCDATETIME(),idUsuarioRevisor=@u FROM dbo.DocumentoPersona d WHERE d.idPersona=(SELECT idPersona FROM dbo.Socio WHERE idSocio=@s) AND d.idDocumentoPersona=(SELECT MAX(x.idDocumentoPersona) FROM dbo.DocumentoPersona x WHERE x.idPersona=d.idPersona AND x.idTipoDocumentoPersona=d.idTipoDocumentoPersona)", P("@m", reason), P("@u", UsuarioId), P("@s", socio));
                 }
+                db.Database.ExecuteSqlCommand(@"INSERT dbo.AltaSocioRevision(idSocio,Estado,idMotivo,idUsuarioRevisor)
+                    VALUES(@s,@estado,@motivo,@usuario)", P("@s", socio), P("@estado", aprobar ? "Aprobada" : "Rechazada"), P("@motivo", reason), P("@usuario", UsuarioId));
                 tx.Commit(); return Ok(new { Message = aprobar ? "Alta aprobada." : "Documentación rechazada; el motivo aparece en la cuenta del socio." });
             }
             catch (Exception ex) { tx.Rollback(); return Error(ex); }
         }
+        [HttpGet, Route("{userId:int}/historial"), JwtAuthorize(Roles="Administrador")]
+        public IHttpActionResult Historial(int userId)
+        {
+            var cuenta = One("SELECT idSocio FROM dbo.UsuarioSistema WHERE idUsuarioSistema=@u", P("@u", userId));
+            if (cuenta == null || cuenta["idSocio"].Type == JTokenType.Null) return NotFound();
+            return Ok(Rows(@"SELECT r.idRevision,r.Estado,m.Codigo MotivoCodigo,m.Nombre Motivo,
+                u.Usuario Revisor,r.FechaUtc FROM dbo.AltaSocioRevision r
+                LEFT JOIN dbo.MotivoRechazoAltaSocio m ON m.idMotivo=r.idMotivo
+                JOIN dbo.UsuarioSistema u ON u.idUsuarioSistema=r.idUsuarioRevisor
+                WHERE r.idSocio=@s ORDER BY r.FechaUtc DESC,r.idRevision DESC", P("@s", (int)cuenta["idSocio"])));
+        }
+
         [HttpGet, Route("documentos/{id:int}")]
         public IHttpActionResult DescargarAlta(int id)
         {

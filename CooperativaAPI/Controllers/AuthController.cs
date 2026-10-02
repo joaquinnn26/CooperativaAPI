@@ -58,7 +58,7 @@ namespace CooperativaAPI.Controllers
 
                 if (usuario.Rol.NombreRol != "Socio" && usuario.idEmpleado.HasValue && usuario.Empleado != null && usuario.Empleado.Activo != true)
                     return BadRequest("El empleado se encuentra inactivo.");
-                if (usuario.Rol.NombreRol == "Socio" && (usuario.Socio2 == null || usuario.Socio2.Activo != true))
+                if (usuario.Rol.NombreRol == "Socio" && (usuario.Socio2 == null || usuario.Socio2.Activo != true) && !AltaSocioAcceso.Pendiente(db, usuario))
                     return BadRequest("El socio se encuentra inactivo.");
 
                 string token = JwtHelper.GenerarToken(usuario);
@@ -133,7 +133,7 @@ namespace CooperativaAPI.Controllers
                 .FirstOrDefault(u => u.idUsuarioSistema == idUsuario.Value);
 
             if (usuario == null) return Unauthorized();
-            if (usuario.Rol.NombreRol == "Socio" && (usuario.Socio2 == null || usuario.Socio2.Activo != true))
+            if (usuario.Rol.NombreRol == "Socio" && (usuario.Socio2 == null || usuario.Socio2.Activo != true) && !AltaSocioAcceso.Pendiente(db, usuario))
                 return Content(System.Net.HttpStatusCode.Forbidden, "El socio se encuentra inactivo.");
             if (usuario.Rol.NombreRol != "Socio" && usuario.Empleado != null && usuario.Empleado.Activo != true)
                 return Content(System.Net.HttpStatusCode.Forbidden, "El empleado se encuentra inactivo.");

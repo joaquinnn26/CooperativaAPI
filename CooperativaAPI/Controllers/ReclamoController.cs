@@ -120,8 +120,18 @@ namespace CooperativaAPI.Controllers
                 nuevo.Fecha = DateTime.Now;
                 nuevo.Activo = true;
 
-                db.Reclamo.Add(nuevo);
-                db.SaveChanges();
+                using (var transaction = db.Database.BeginTransaction())
+                {
+                    db.Reclamo.Add(nuevo);
+                    db.SaveChanges();
+                    EventoOperativoStore.Registrar(db, (ClaimsPrincipal)User, new EventoOperativoNuevo
+                    {
+                        Contexto = "RECLAMO", CodigoEvento = "ReclamoCreado", Entidad = "Reclamo", idEntidad = nuevo.idReclamo.ToString(), Area = "ADMINISTRACION",
+                        idSocio = nuevo.idSocio, EstadoNuevo = "Pendiente", Resultado = "ReclamoCreado",
+                        Datos = new { nuevo.idTipoReclamo, Origen = User.IsInRole("Socio") ? "PortalSocio" : "CargaEmpleado" }
+                    });
+                    transaction.Commit();
+                }
 
                 return Ok(new
                 {
@@ -156,6 +166,8 @@ namespace CooperativaAPI.Controllers
                 if (!string.IsNullOrWhiteSpace(datos.Descripcion))
                     reclamo.Descripcion = Limpiar(datos.Descripcion);
 
+                var estadoAnterior = reclamo.EstadoReclamo?.NombreEstado;
+                bool cambioEstado = datos.idEstadoReclamo != 0 && datos.idEstadoReclamo != reclamo.idEstadoReclamo;
                 if (datos.idEstadoReclamo != 0)
                 {
                     var estadoValido = db.EstadoReclamo.Any(e => e.idEstadoReclamo == datos.idEstadoReclamo);
@@ -177,7 +189,22 @@ namespace CooperativaAPI.Controllers
                     reclamo.idEstadoReclamo = datos.idEstadoReclamo;
                 }
 
-                db.SaveChanges();
+                using (var transaction = db.Database.BeginTransaction())
+                {
+                    db.SaveChanges();
+                    if (cambioEstado)
+                    {
+                        var estadoNuevo = db.EstadoReclamo.Where(e => e.idEstadoReclamo == reclamo.idEstadoReclamo).Select(e => e.NombreEstado).FirstOrDefault();
+                        EventoOperativoStore.Registrar(db, (ClaimsPrincipal)User, new EventoOperativoNuevo
+                        {
+                            Contexto = "RECLAMO", CodigoEvento = "EstadoReclamoCambiado", Entidad = "Reclamo", idEntidad = id.ToString(), Area = "ADMINISTRACION",
+                            idSocio = reclamo.idSocio, EstadoAnterior = estadoAnterior, EstadoNuevo = estadoNuevo,
+                            Resultado = "Estado:" + reclamo.idEstadoReclamo, MotivoDesconocido = true,
+                            Detalle = "El catálogo de motivos de transición de reclamo está pendiente de validación con la cooperativa."
+                        });
+                    }
+                    transaction.Commit();
+                }
                 return Ok(new { message = "Reclamo actualizado correctamente.", reclamo = MapReclamoAdmin(reclamo) });
             }
             catch (Exception ex)

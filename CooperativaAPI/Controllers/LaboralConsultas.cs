@@ -98,6 +98,12 @@ namespace CooperativaAPI.Controllers {
    if(siguiente!=null && siguiente.idServicioSocio==actual.idServicioSocio && asignaciones.Any() && (asignaciones[0]["FechaFin"].Type==JTokenType.Null || siguiente.FechaLectura<=(DateTime)asignaciones[0]["FechaFin"]))siguiente.ConsumoCalculado=siguiente.ValorLectura-valor;
    var despues=new{actual.idMedicion,actual.ValorLectura,actual.ConsumoCalculado,Siguiente=siguiente==null?null:new{siguiente.idMedicion,siguiente.ConsumoCalculado}};
    db.Database.ExecuteSqlCommand("INSERT dbo.CorreccionLecturaLaboral(idMedicion,Area,idUsuarioSistema,idMotivo,Anterior,Nuevo) VALUES(@id,@a,@u,@motivo,@antes,@nuevo)",P("@id",id),P("@a",area),P("@u",LaboralAccess.Usuario(Principal)),P("@motivo",(int)motivo["idMotivo"]),P("@antes",JsonConvert.SerializeObject(antes)),P("@nuevo",JsonConvert.SerializeObject(despues)));
+   EventoOperativoStore.Registrar(db,Principal,new EventoOperativoNuevo {
+    Contexto="LECTURA_CORRECCION",CodigoEvento="CorregirLectura",Entidad="Medicion",idEntidad=id.ToString(),Area=area,
+    idSocio=conexion.idSocio,idServicio=conexion.idServicio,idServicioSocio=conexion.idServicioSocio,idMedidor=actual.idMedidor,
+    EstadoAnterior="Registrada",EstadoNuevo="Corregida",MotivoNombre=(string)motivo["Nombre"],MotivoRequerido=true,
+    Datos=new{antes,despues}
+   });
    Audit(area,null,"CorregirLectura",null,null,(string)motivo["Nombre"],new{antes,despues});return despues;
   });}
   [HttpGet,Route("lecturas/{id:int}/historial")]

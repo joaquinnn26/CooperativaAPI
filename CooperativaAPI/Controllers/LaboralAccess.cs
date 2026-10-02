@@ -43,9 +43,19 @@ namespace CooperativaAPI.Controllers {
    return areas;
   }
   public static void Auditar(CooperativaEntities db,ClaimsPrincipal user,string area,int? tarea,string accion,string anterior,string nuevo,string motivo,object datos=null) {
-   db.Database.ExecuteSqlCommand(@"INSERT dbo.AuditoriaLaboral(idTarea,Area,idUsuarioSistema,idEmpleado,Accion,EstadoAnterior,EstadoNuevo,Motivo,Datos)
-    VALUES(@t,@a,@u,@e,@accion,@antes,@despues,@motivo,@datos)",P("@t",tarea),P("@a",area),P("@u",Usuario(user)),P("@e",Empleado(db,user)),P("@accion",accion),P("@antes",anterior),P("@despues",nuevo),P("@motivo",motivo),P("@datos",datos==null?null:JsonConvert.SerializeObject(datos)));
+   var auditId=db.Database.SqlQuery<long>(@"INSERT dbo.AuditoriaLaboral(idTarea,Area,idUsuarioSistema,idEmpleado,Accion,EstadoAnterior,EstadoNuevo,Motivo,Datos)
+    OUTPUT INSERTED.idAuditoria VALUES(@t,@a,@u,@e,@accion,@antes,@despues,@motivo,@datos)",P("@t",tarea),P("@a",area),P("@u",Usuario(user)),P("@e",Empleado(db,user)),P("@accion",accion),P("@antes",anterior),P("@despues",nuevo),P("@motivo",motivo),P("@datos",datos==null?null:JsonConvert.SerializeObject(datos))).Single();
+   var task=tarea.HasValue?db.Database.SqlQuery<TareaEvento>("SELECT TOP 1 idSocio,idServicioSocio,idEmpleadoAsignado,OrigenId,Categoria FROM dbo.TareaLaboral WHERE idTarea=@id",P("@id",tarea.Value)).SingleOrDefault():null;
+   var contexto="LABORAL_"+((area??task?.Categoria??"GENERAL").ToUpperInvariant())+"_"+(accion??"EVENTO").ToUpperInvariant();
+   bool motivoObligatorio=new[]{"Rechazar","Devolver","CorregirLectura","RechazarInstalacion"}.Contains(accion);
+   if(accion!="CorregirLectura") EventoOperativoStore.Registrar(db,user,new EventoOperativoNuevo {
+    Contexto=contexto,CodigoEvento=accion,Entidad=tarea.HasValue?"TareaLaboral":"AuditoriaLaboral",idEntidad=tarea.HasValue?tarea.Value.ToString():auditId.ToString(),Area=area,
+    idSocio=task?.idSocio,idServicioSocio=task?.idServicioSocio,idEmpleado=task?.idEmpleadoAsignado,EstadoAnterior=anterior,EstadoNuevo=nuevo,
+    MotivoNombre=motivo,MotivoRequerido=motivoObligatorio,Detalle=motivoObligatorio?null:motivo,
+    Datos=datos==null?new{OrigenId=task?.OrigenId,Categoria=task?.Categoria}:datos
+   });
   }
+  private sealed class TareaEvento { public int? idSocio{get;set;} public int? idServicioSocio{get;set;} public int? idEmpleadoAsignado{get;set;} public int? OrigenId{get;set;} public string Categoria{get;set;} }
   public static bool LecturistaRuta(CooperativaEntities db,ClaimsPrincipal user,int ruta,bool encargado=false) {
    var e=Empleado(db,user);
    var datos=db.RutaMedicion.Find(ruta);if(datos==null)return false;

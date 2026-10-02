@@ -13,23 +13,8 @@ namespace CooperativaAPI.Controllers
     {
         private CooperativaEntities db = new CooperativaEntities();
 
-        // =========================================
-        // GENERAR NUMERO AUTOMATICO
-        // =========================================
-        private string GenerarNumeroMedidor()
-        {
-            int ultimoId = 0;
-
-            if (db.Medidor.Any())
-            {
-                ultimoId = db.Medidor.Max(m => m.idMedidor);
-            }
-
-            int siguiente = ultimoId + 1;
-
-            return "MED-" + siguiente.ToString("D4");
-        }
-
+        // Solo consulta los medidores instalados por compatibilidad con clientes existentes.
+        // El inventario completo y todas las operaciones se administran en InventarioMedidoresController.
         // =========================================
         // LISTAR TODOS
         // =========================================
@@ -196,42 +181,6 @@ namespace CooperativaAPI.Controllers
                 return BadRequest("Error al obtener medidor: " + ex.Message);
             }
         }
-
-        // =========================================
-        // CREAR
-        // =========================================
-        [HttpPost]
-        [Route("")]
-        [JwtAuthorize(Roles = "Administrador")]
-        public IHttpActionResult Crear([FromBody] Medidor medidor)
-        { return Content(HttpStatusCode.Conflict,"Usá Inventario de medidores para registrar la operación con motivo e historial."); }
-
-        // =========================================
-        // EDITAR
-        // =========================================
-        [HttpPut]
-        [Route("{id}")]
-        [JwtAuthorize(Roles = "Administrador")]
-        public IHttpActionResult Editar(int id, [FromBody] Medidor medidorEditado)
-        { return Content(HttpStatusCode.Conflict,"Usá Inventario de medidores para registrar la operación con motivo e historial."); }
-
-        // =========================================
-        // BAJA LOGICA
-        // =========================================
-        [HttpPut]
-        [Route("estado/{id}")]
-        [JwtAuthorize(Roles = "Administrador")]
-        public IHttpActionResult CambiarEstado(int id)
-        { return Content(HttpStatusCode.Conflict,"Usá Inventario de medidores para registrar la operación con motivo e historial."); }
-
-        // =========================================
-        // ELIMINAR
-        // =========================================
-        [HttpDelete]
-        [Route("{id}")]
-        [JwtAuthorize(Roles = "Administrador")]
-        public IHttpActionResult Eliminar(int id)
-        { return Content(HttpStatusCode.Conflict,"Usá Inventario de medidores para registrar la operación con motivo e historial."); }
 
         private int? ObtenerClaimEntero(string tipo)
         {

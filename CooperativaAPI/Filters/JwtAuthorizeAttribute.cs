@@ -1,4 +1,4 @@
-ï»¿using System;
+using System;
 using System.Net;
 using System.Net.Http;
 using System.Text;
@@ -81,20 +81,32 @@ namespace CooperativaAPI.Filters
 
                     var rolToken = identity.FindFirst(ClaimTypes.Role)?.Value;
                     var rolActual = usuario?.Rol?.NombreRol;
+                    var altaPendiente = usuario != null && CooperativaAPI.Controllers.AltaSocioAcceso.Pendiente(db, usuario);
 
                     if (usuario == null ||
                         string.IsNullOrWhiteSpace(rolActual) ||
                         !string.Equals(rolToken, rolActual, StringComparison.OrdinalIgnoreCase) ||
-                        (rolActual=="Socio" && (usuario.Socio2==null || usuario.Socio2.Activo!=true)) ||
+                        (rolActual=="Socio" && (usuario.Socio2==null || usuario.Socio2.Activo!=true) && !altaPendiente) ||
                         (rolActual!="Socio" && usuario.Empleado!=null && usuario.Empleado.Activo!=true) || (rolActual=="Empleado" && usuario.Empleado==null))
                     {
                         actionContext.Response = request.CreateResponse(HttpStatusCode.Unauthorized);
                         return;
                     }
+                    if (altaPendiente)
+                    {
+                        var controller = actionContext.ControllerContext.ControllerDescriptor.ControllerName;
+                        var action = actionContext.ActionDescriptor.ActionName;
+                        var permitido = controller == "SocioAlta" || controller == "AltaSocio" || (controller == "Auth" && (action == "ObtenerSesion" || action == "CambiarContrasena"));
+                        if (!permitido)
+                        {
+                            actionContext.Response = request.CreateResponse(HttpStatusCode.Forbidden, new { Message = "El alta de socio está pendiente. Completá la documentación y esperá su aprobación." });
+                            return;
+                        }
+                    }
                 }
 
                 using(var permisos=new CooperativaEntities()) {
-                    // El vÃ­nculo del token tambiÃ©n debe coincidir con la cuenta actual.
+                    // El vínculo del token también debe coincidir con la cuenta actual.
                     var actual=permisos.UsuarioSistema.Find(idUsuario);
                     int tokenEmployee,tokenSocio;
                     var e=identity.FindFirst("idEmpleado")?.Value; var s=identity.FindFirst("idSocio")?.Value;
@@ -103,7 +115,7 @@ namespace CooperativaAPI.Filters
                         actionContext.Response=request.CreateResponse(HttpStatusCode.Unauthorized); return;
                     }
                     if(!CooperativaAPI.Controllers.LaboralAccess.LegacyGate(permisos,principal,actionContext.ControllerContext.ControllerDescriptor.ControllerName,actionContext.ActionDescriptor.ActionName,request.Method.Method)) {
-                        actionContext.Response=request.CreateResponse(HttpStatusCode.Forbidden,new {message="Esta operaciÃ³n requiere el flujo laboral y la autorizaciÃ³n del Ã¡rea correspondiente."}); return;
+                        actionContext.Response=request.CreateResponse(HttpStatusCode.Forbidden,new {message="Esta operación requiere el flujo laboral y la autorización del área correspondiente."}); return;
                     }
                 }
                 if (!string.IsNullOrWhiteSpace(Roles))
