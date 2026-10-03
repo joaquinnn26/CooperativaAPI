@@ -38,7 +38,7 @@ BEGIN
         CodigoEvento nvarchar(80) NOT NULL,
         Entidad nvarchar(60) NOT NULL,
         idEntidad nvarchar(80) NOT NULL,
-        FechaUtc datetime2(3) NOT NULL CONSTRAINT DF_EventoOperativo_Fecha DEFAULT(SYSUTCDATETIME()),
+        FechaEventoUtc datetime2(3) NOT NULL CONSTRAINT DF_EventoOperativo_Fecha DEFAULT(SYSUTCDATETIME()),
         idUsuarioSistema int NULL REFERENCES dbo.UsuarioSistema(idUsuarioSistema),
         ActorSistema bit NOT NULL CONSTRAINT DF_EventoOperativo_ActorSistema DEFAULT(0),
         idEmpleado int NULL REFERENCES dbo.Empleado(idEmpleado),
@@ -68,9 +68,9 @@ END;
 IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID('dbo.EventoOperativo') AND name='UX_EventoOperativo_ClaveOrigen')
     CREATE UNIQUE INDEX UX_EventoOperativo_ClaveOrigen ON dbo.EventoOperativo(ClaveOrigen) WHERE ClaveOrigen IS NOT NULL;
 IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID('dbo.EventoOperativo') AND name='IX_EventoOperativo_ContextoFecha')
-    CREATE INDEX IX_EventoOperativo_ContextoFecha ON dbo.EventoOperativo(Contexto,FechaUtc DESC) INCLUDE(CodigoEvento,Entidad,idEntidad,idMotivoEvento,Area,idEmpleado);
+    CREATE INDEX IX_EventoOperativo_ContextoFecha ON dbo.EventoOperativo(Contexto,FechaEventoUtc DESC) INCLUDE(CodigoEvento,Entidad,idEntidad,idMotivoEvento,Area,idEmpleado);
 IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID('dbo.EventoOperativo') AND name='IX_EventoOperativo_AreaFecha')
-    CREATE INDEX IX_EventoOperativo_AreaFecha ON dbo.EventoOperativo(Area,FechaUtc DESC) INCLUDE(Contexto,CodigoEvento,Entidad,idEntidad,idMotivoEvento);
+    CREATE INDEX IX_EventoOperativo_AreaFecha ON dbo.EventoOperativo(Area,FechaEventoUtc DESC) INCLUDE(Contexto,CodigoEvento,Entidad,idEntidad,idMotivoEvento);
 IF NOT EXISTS(SELECT 1 FROM sys.indexes WHERE object_id=OBJECT_ID('dbo.EventoOperativo') AND name='IX_EventoOperativo_Operacion')
     CREATE INDEX IX_EventoOperativo_Operacion ON dbo.EventoOperativo(OperacionId) INCLUDE(Contexto,CodigoEvento,idMedidor) WHERE OperacionId IS NOT NULL;
 
@@ -79,6 +79,17 @@ INSERT @Oficial VALUES
  ('LECTURA_NO_REALIZADA','MEDIDOR_OBSTRUIDO',N'Medidor tapado u obstruido',1),
  ('LECTURA_NO_REALIZADA','MEDIDOR_AVERIADO',N'Medidor averiado',2),
  ('LECTURA_NO_REALIZADA','RIESGO_EMPLEADO',N'Riesgo para el empleado',3),
+ ('LECTURA_NO_REALIZADA','DOMICILIO_CERRADO',N'Domicilio cerrado o sin acceso',4),
+ ('LECTURA_NO_REALIZADA','ACCESO_DENEGADO',N'Acceso denegado por el ocupante',5),
+ ('LECTURA_NO_REALIZADA','MEDIDOR_NO_LOCALIZADO',N'Medidor no localizado en el domicilio',6),
+ ('LECTURA_NO_REALIZADA','MEDIDOR_ILEGIBLE',N'Visor o numeracion ilegible',7),
+ ('LECTURA_NO_REALIZADA','DIRECCION_NO_COINCIDE',N'La direccion no coincide con la conexion',8),
+ ('MEDIDOR_FALLA','SIN_REGISTRO',N'El medidor no registra consumo',1),
+ ('MEDIDOR_FALLA','CONTADOR_DETENIDO',N'Contador detenido o trabado',2),
+ ('MEDIDOR_FALLA','VISOR_ILEGIBLE',N'Visor o numeracion ilegible',3),
+ ('MEDIDOR_FALLA','LECTURA_IRREGULAR',N'Lectura irregular o inestable',4),
+ ('MEDIDOR_FALLA','DANO_FISICO',N'Dano en la carcasa o las conexiones',5),
+ ('MEDIDOR_FALLA','POSIBLE_MANIPULACION',N'Posible manipulacion del equipo',6),
  ('MEDIDOR_REEMPLAZO','BAJA_SERVICIO',N'Baja del servicio',1),
  ('MEDIDOR_REEMPLAZO','MEDIDOR_AVERIADO',N'Medidor averiado',2),
  ('MEDIDOR_REEMPLAZO','MEDIDOR_OBSOLETO',N'Medidor obsoleto',3),
@@ -130,7 +141,7 @@ IF OBJECT_ID('dbo.MotivoRechazoAltaSocio','U') IS NOT NULL
 
 -- Importa trazas existentes sin inventar actor, estado previo ni motivo desconocido.
 IF OBJECT_ID('dbo.EventoMedidor','U') IS NOT NULL
-    INSERT dbo.EventoOperativo(Contexto,CodigoEvento,Entidad,idEntidad,FechaUtc,idUsuarioSistema,Area,idEmpleadoActor,idMedidor,EstadoAnterior,EstadoNuevo,idMotivoEvento,MotivoRegistrado,Detalle,Datos,OperacionId,ClaveOrigen,MotivoDesconocido)
+    INSERT dbo.EventoOperativo(Contexto,CodigoEvento,Entidad,idEntidad,FechaEventoUtc,idUsuarioSistema,Area,idEmpleadoActor,idMedidor,EstadoAnterior,EstadoNuevo,idMotivoEvento,MotivoRegistrado,Detalle,Datos,OperacionId,ClaveOrigen,MotivoDesconocido)
     SELECT CONCAT('MEDIDOR_',UPPER(COALESCE(oldMotivo.Accion,e.Accion))),e.Accion,'Medidor',CONVERT(nvarchar(80),e.idMedidor),e.FechaUtc,e.idUsuarioSistema,
            CASE WHEN t.Nombre='Agua' THEN 'AGUA' WHEN t.Nombre IN ('Electrico','Eléctrico') THEN 'ENERGIA' END,u.idEmpleado,e.idMedidor,NULL,NULL,mot.idMotivoEvento,oldMotivo.Nombre,e.Detalle,
            (SELECT e.Anterior Anterior,e.Nuevo Nuevo,e.idAsignacion idAsignacion,e.ReferenciaTrabajo ReferenciaTrabajo FOR JSON PATH,WITHOUT_ARRAY_WRAPPER),
@@ -142,7 +153,7 @@ IF OBJECT_ID('dbo.EventoMedidor','U') IS NOT NULL
     WHERE NOT EXISTS(SELECT 1 FROM dbo.EventoOperativo x WHERE x.ClaveOrigen=CONCAT('EventoMedidor:',e.idEvento));
 
 IF OBJECT_ID('dbo.AuditoriaLaboral','U') IS NOT NULL
-    INSERT dbo.EventoOperativo(Contexto,CodigoEvento,Entidad,idEntidad,FechaUtc,idUsuarioSistema,idEmpleado,idEmpleadoActor,Area,idSocio,idServicioSocio,EstadoAnterior,EstadoNuevo,idMotivoEvento,MotivoRegistrado,Detalle,Datos,ClaveOrigen,MotivoDesconocido)
+    INSERT dbo.EventoOperativo(Contexto,CodigoEvento,Entidad,idEntidad,FechaEventoUtc,idUsuarioSistema,idEmpleado,idEmpleadoActor,Area,idSocio,idServicioSocio,EstadoAnterior,EstadoNuevo,idMotivoEvento,MotivoRegistrado,Detalle,Datos,ClaveOrigen,MotivoDesconocido)
     SELECT CONCAT('LABORAL_',UPPER(COALESCE(a.Area,t.Area,'GENERAL')),'_',UPPER(a.Accion)),a.Accion,
            CASE WHEN t.Categoria IS NULL THEN 'AuditoriaLaboral' ELSE t.Categoria END,
            CONVERT(nvarchar(80),COALESCE(t.idTarea,t.OrigenId,a.idAuditoria)),a.FechaUtc,a.idUsuarioSistema,COALESCE(t.idEmpleadoAsignado,a.idEmpleado),a.idEmpleado,
@@ -154,7 +165,7 @@ IF OBJECT_ID('dbo.AuditoriaLaboral','U') IS NOT NULL
       AND NOT EXISTS(SELECT 1 FROM dbo.EventoOperativo x WHERE x.ClaveOrigen=CONCAT('AuditoriaLaboral:',a.idAuditoria));
 
 IF OBJECT_ID('dbo.CorreccionLecturaLaboral','U') IS NOT NULL
-    INSERT dbo.EventoOperativo(Contexto,CodigoEvento,Entidad,idEntidad,FechaUtc,idUsuarioSistema,idEmpleadoActor,Area,idServicioSocio,idMedidor,EstadoAnterior,EstadoNuevo,idMotivoEvento,MotivoRegistrado,Datos,ClaveOrigen,MotivoDesconocido)
+    INSERT dbo.EventoOperativo(Contexto,CodigoEvento,Entidad,idEntidad,FechaEventoUtc,idUsuarioSistema,idEmpleadoActor,Area,idServicioSocio,idMedidor,EstadoAnterior,EstadoNuevo,idMotivoEvento,MotivoRegistrado,Datos,ClaveOrigen,MotivoDesconocido)
     SELECT 'LECTURA_CORRECCION','CorregirLectura','Medicion',CONVERT(nvarchar(80),c.idMedicion),c.FechaUtc,c.idUsuarioSistema,u.idEmpleado,c.Area,me.idServicioSocio,me.idMedidor,
            'Registrada','Corregida',mot.idMotivoEvento,ml.Nombre,
            (SELECT c.Anterior Anterior,c.Nuevo Nuevo FOR JSON PATH,WITHOUT_ARRAY_WRAPPER),CONCAT('CorreccionLecturaLaboral:',c.idCorreccion),CASE WHEN mot.idMotivoEvento IS NULL THEN 1 ELSE 0 END
@@ -170,7 +181,7 @@ BEGIN
         LAG(e.NombreEstado) OVER(PARTITION BY h.idSolicitudServicio ORDER BY h.FechaCambio,h.idHistorialEstadoSolicitud) EstadoAnterior
       FROM dbo.HistorialEstadoSolicitud h JOIN dbo.EstadoSolicitudServicio e ON e.idEstadoSolicitud=h.idEstadoSolicitud
     )
-    INSERT dbo.EventoOperativo(Contexto,CodigoEvento,Entidad,idEntidad,FechaUtc,idEmpleadoActor,Area,idSocio,idServicio,EstadoAnterior,EstadoNuevo,Detalle,ClaveOrigen,MotivoDesconocido)
+    INSERT dbo.EventoOperativo(Contexto,CodigoEvento,Entidad,idEntidad,FechaEventoUtc,idEmpleadoActor,Area,idSocio,idServicio,EstadoAnterior,EstadoNuevo,Detalle,ClaveOrigen,MotivoDesconocido)
     SELECT 'SOLICITUD_SERVICIO','CambioEstado','SolicitudServicio',CONVERT(nvarchar(80),h.idSolicitudServicio),CONVERT(datetime2(3),h.FechaCambio),h.idEmpleado,a.Area,s.idSocio,s.idServicio,h.EstadoAnterior,h.NombreEstado,h.Observaciones,
            CONCAT('HistorialEstadoSolicitud:',h.idHistorialEstadoSolicitud),CASE WHEN h.NombreEstado='Rechazada' THEN 1 ELSE 0 END
     FROM H h JOIN dbo.SolicitudServicio s ON s.idSolicitudServicio=h.idSolicitudServicio LEFT JOIN dbo.AreaServicio a ON a.idServicio=s.idServicio
@@ -178,7 +189,7 @@ BEGIN
 END;
 
 IF OBJECT_ID('dbo.HistorialTerritorial','U') IS NOT NULL
-    INSERT dbo.EventoOperativo(Contexto,CodigoEvento,Entidad,idEntidad,FechaUtc,idUsuarioSistema,EstadoNuevo,Detalle,Datos,ClaveOrigen,MotivoDesconocido)
+    INSERT dbo.EventoOperativo(Contexto,CodigoEvento,Entidad,idEntidad,FechaEventoUtc,idUsuarioSistema,EstadoNuevo,Detalle,Datos,ClaveOrigen,MotivoDesconocido)
     SELECT CONCAT('TERRITORIO_',UPPER(h.Entidad)),h.Accion,h.Entidad,CONVERT(nvarchar(80),h.idEntidad),h.FechaUtc,h.idUsuarioSistema,h.Accion,h.Motivo,
            (SELECT h.Anterior Anterior,h.Nuevo Nuevo FOR JSON PATH,WITHOUT_ARRAY_WRAPPER),CONCAT('HistorialTerritorial:',h.idHistorial),CASE WHEN h.Motivo IS NULL THEN 0 ELSE 1 END
     FROM dbo.HistorialTerritorial h

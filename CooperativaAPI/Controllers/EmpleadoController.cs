@@ -182,7 +182,7 @@ namespace CooperativaAPI.Controllers
 
 					empleado.Activo = false;
 
-                    LaboralAccess.Auditar(db,(ClaimsPrincipal)User,null,null,"BajaEmpleado","Activo","Inactivo","Baja del acceso laboral",new{empleado.idEmpleado});
+                    LaboralAccess.Auditar(db,(ClaimsPrincipal)User,null,null,"BajaEmpleado","Activo","Inactivo","Baja del acceso laboral",new{empleado.idEmpleado},id);
                     db.Database.ExecuteSqlCommand("UPDATE dbo.EncargadoArea SET HastaUtc=SYSUTCDATETIME() WHERE idEmpleado=@id AND HastaUtc IS NULL; UPDATE dbo.EmpleadoArea SET HastaUtc=SYSUTCDATETIME() WHERE idEmpleado=@id AND HastaUtc IS NULL",LaboralAccess.P("@id",id));
 
 					db.SaveChanges();

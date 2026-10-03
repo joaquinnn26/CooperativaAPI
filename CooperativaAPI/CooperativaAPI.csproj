@@ -526,5 +526,10 @@
   <ItemGroup><Content Include="Data\20260930_AltaSocioRevision.sql" /></ItemGroup>
   <ItemGroup><Content Include="Data\20260930_UnificarDocumentosCaducidadRutas.sql" /></ItemGroup>
   <ItemGroup><Content Include="Data\20261001_EventosOperativos.sql" /></ItemGroup>
+  <ItemGroup><Content Include="Data\20261002_MotivosPredefinidos.sql" /></ItemGroup>
   <ItemGroup><Content Include="Data\20261002_IntegridadCooperativa.sql" /></ItemGroup>
+  <ItemGroup><Content Include="Data\20261002_NormalizacionRelacional.sql" /></ItemGroup>
+  <ItemGroup><Content Include="Data\20261002_NormalizarAsignacionMedidor.sql" /></ItemGroup>
+  <ItemGroup><Content Include="Data\20261002_NormalizarMedidor.sql" /></ItemGroup>
+  <ItemGroup><Content Include="Data\20261002_NormalizarDocumentos.sql" /></ItemGroup>
 </Project>

@@ -447,9 +447,9 @@ namespace CooperativaAPI.Controllers
                         FROM dbo.MotivoEventoOperativo WHERE idMotivoEvento=@id AND Contexto='LECTURA_NO_REALIZADA' AND Activo=1 AND ConfirmadoCooperativa=1",
                         LaboralAccess.P("@id",request.idMotivoEvento)).SingleOrDefault();
                     if(motivo==null)return BadRequest("Seleccioná un motivo confirmado para la lectura no realizada.");
-                    if(motivo.Codigo=="MEDIDOR_OBSTRUIDO")request.Estado="NoAcceso";
-                    else if(motivo.Codigo=="MEDIDOR_AVERIADO")request.Estado="MedidorDanado";
-                    else if(motivo.Codigo=="RIESGO_EMPLEADO")request.Estado="Observado";
+                    if(new[]{"MEDIDOR_OBSTRUIDO","DOMICILIO_CERRADO","ACCESO_DENEGADO"}.Contains(motivo.Codigo))request.Estado="NoAcceso";
+                    else if(new[]{"MEDIDOR_AVERIADO","MEDIDOR_ILEGIBLE"}.Contains(motivo.Codigo))request.Estado="MedidorDanado";
+                    else if(new[]{"RIESGO_EMPLEADO","MEDIDOR_NO_LOCALIZADO","DIRECCION_NO_COINCIDE"}.Contains(motivo.Codigo))request.Estado="Observado";
                     else return BadRequest("El motivo no es válido para una lectura no realizada.");
                 }
 

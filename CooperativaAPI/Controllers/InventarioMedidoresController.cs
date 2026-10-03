@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Data;
 using System.Data.SqlClient;
 using System.Linq;
@@ -61,7 +61,6 @@ namespace CooperativaAPI.Controllers
         public string Nombre { get; set; }
         public string Accion { get; set; }
         public bool Activo { get; set; }
-        public byte[] Version { get; set; }
     }
     public class EventoMedidorDto
     {
@@ -110,14 +109,15 @@ namespace CooperativaAPI.Controllers
             return new SqlParameter(key,value ?? DBNull.Value);
         }
         public const string SelectFicha=@"SELECT m.idMedidor,m.Numero,m.idTipoMedidor,t.Nombre Tipo,f.Marca,f.Modelo,
-            (SELECT CONCAT(p.Nombre,' ',p.Apellido) FROM dbo.Socio so JOIN dbo.Persona p ON p.idPersona=so.idPersona WHERE so.idSocio=a.idSocio) Socio,
+            (SELECT CONCAT(p.Nombre,' ',p.Apellido) FROM dbo.Socio so JOIN dbo.Persona p ON p.idPersona=so.idPersona WHERE so.idSocio=ss.idSocio) Socio,
             (SELECT se.Nombre FROM dbo.ServicioSocio ss JOIN dbo.Servicio se ON se.idServicio=ss.idServicio WHERE ss.idServicioSocio=a.idServicioSocio) Servicio,
             (SELECT TOP 1 CONCAT(u.Direccion,' · ',u.Localidad,' · Ruta ',u.Ruta,' / ',u.Folio) FROM dbo.UbicacionServicio u WHERE u.idServicioSocio=a.idServicioSocio ORDER BY u.idServicioSocio) Direccion,
             CAST(CASE WHEN EXISTS(SELECT 1 FROM dbo.AsignacionMedidor h WHERE h.idMedidor=m.idMedidor) THEN 1 ELSE 0 END AS bit) Usado,
-            f.EstadoFisico,f.IdentidadVerificada,f.NumeroAnterior,f.Version,a.idServicioSocio,a.idSocio,a.idAsignacion,ISNULL(a.PendienteConciliacion,0) PendienteConciliacion
+            f.EstadoFisico,f.IdentidadVerificada,f.NumeroAnterior,f.Version,a.idServicioSocio,ss.idSocio,a.idAsignacion,ISNULL(a.PendienteConciliacion,0) PendienteConciliacion
             FROM dbo.Medidor m JOIN dbo.FichaMedidor f ON f.idMedidor=m.idMedidor
             JOIN dbo.TipoMedidor t ON t.idTipoMedidor=m.idTipoMedidor
-            LEFT JOIN dbo.AsignacionMedidor a ON a.idMedidor=m.idMedidor AND a.Cerrada=0";
+            LEFT JOIN dbo.AsignacionMedidor a ON a.idMedidor=m.idMedidor AND a.Cerrada=0
+            LEFT JOIN dbo.ServicioSocio ss ON ss.idServicioSocio=a.idServicioSocio";
         public static FichaMedidorDto Ficha(CooperativaEntities db,int id) {
             return db.Database.SqlQuery<FichaMedidorDto>(SelectFicha+" WHERE m.idMedidor=@id",P("@id",id)).SingleOrDefault();
         }
@@ -136,8 +136,9 @@ namespace CooperativaAPI.Controllers
             if(!new[]{"Alta","Verificar","Editar","Instalar","Retirar","Falla","Reparacion","Revision","BajaDefinitiva"}.Contains(accion)) throw new ArgumentException("Acción inválida.");
             if(((accion=="Alta" && motivoAccion==null) || accion=="Editar" || accion=="BajaDefinitiva") && !user.IsInRole("Administrador")) throw new UnauthorizedAccessException();
             if(Texto(op.Detalle).Length>1000 || Texto(op.ReferenciaTrabajo).Length>100) throw new ArgumentException("Detalle o referencia demasiado largos.");
-            var motivo=db.Database.SqlQuery<MotivoMedidorDto>("SELECT * FROM dbo.MotivoMedidor WHERE idMotivo=@id AND Activo=1 AND Accion=@accion",P("@id",op.idMotivo),P("@accion",motivoAccion??accion)).SingleOrDefault();
-            if(motivo==null) throw new ArgumentException("Seleccioná un motivo activo para esta acción.");
+            var requiereMotivo=accion=="Falla";
+            var motivo=requiereMotivo?db.Database.SqlQuery<MotivoMedidorDto>("SELECT idMotivo,Nombre,Accion,Activo FROM dbo.MotivoMedidor WHERE idMotivo=@id AND Activo=1 AND Accion=@accion",P("@id",op.idMotivo),P("@accion",motivoAccion??accion)).SingleOrDefault():null;
+            if(requiereMotivo && motivo==null) throw new ArgumentException("Selecciona un motivo técnico predefinido para la falla.");
             var fecha=op.Fecha?.UtcDateTime ?? DateTime.UtcNow;
             if(fecha>DateTime.UtcNow.AddMinutes(1)) throw new ArgumentException("La fecha no puede ser futura.");
             var antes=id.HasValue?Ficha(db,id.Value):null;
@@ -158,10 +159,10 @@ namespace CooperativaAPI.Controllers
                 if(antes?.idAsignacion!=null && antes.idTipoMedidor!=op.idTipoMedidor) throw new ArgumentException("Retirá el medidor antes de cambiar su tipo.");
                 if(db.Database.SqlQuery<int>("SELECT 1 FROM dbo.Medidor WITH(UPDLOCK,HOLDLOCK) WHERE Numero=@numero AND idMedidor<>@id",P("@numero",numero),P("@id",medidorId)).Any()) throw new ArgumentException("Ese número ya pertenece a un medidor.");
                 if(accion=="Alta") {
-                    medidorId=db.Database.SqlQuery<int>("INSERT dbo.Medidor(Numero,idTipoMedidor,idServicioSocio,Activo) OUTPUT INSERTED.idMedidor VALUES(@numero,@tipo,NULL,0)",P("@numero",numero),P("@tipo",op.idTipoMedidor)).Single();
+                    medidorId=db.Database.SqlQuery<int>("INSERT dbo.MedidorEquipo(Numero,idTipoMedidor) OUTPUT INSERTED.idMedidor VALUES(@numero,@tipo)",P("@numero",numero),P("@tipo",op.idTipoMedidor)).Single();
                     db.Database.ExecuteSqlCommand("INSERT dbo.FichaMedidor(idMedidor,IdentidadVerificada,EstadoFisico,Marca,Modelo) VALUES(@id,1,'Operativo',@marca,@modelo)",P("@id",medidorId),P("@marca",Texto(op.Marca)),P("@modelo",Texto(op.Modelo)));
                 } else {
-                    db.Database.ExecuteSqlCommand("UPDATE dbo.Medidor SET Numero=@numero,idTipoMedidor=@tipo WHERE idMedidor=@id",P("@numero",numero),P("@tipo",op.idTipoMedidor),P("@id",medidorId));
+                    db.Database.ExecuteSqlCommand("UPDATE dbo.MedidorEquipo SET Numero=@numero,idTipoMedidor=@tipo WHERE idMedidor=@id",P("@numero",numero),P("@tipo",op.idTipoMedidor),P("@id",medidorId));
                     db.Database.ExecuteSqlCommand("UPDATE dbo.FichaMedidor SET IdentidadVerificada=1,Marca=@marca,Modelo=@modelo WHERE idMedidor=@id",P("@id",medidorId),P("@marca",Texto(op.Marca)),P("@modelo",Texto(op.Modelo)));
                 }
                 if(accion=="Verificar" && op.EstadoFisico!=null) {
@@ -178,9 +179,8 @@ namespace CooperativaAPI.Controllers
                 if(!op.Lectura.HasValue || op.Lectura<0) throw new ArgumentException("Indicá la lectura inicial real.");
                 var ultima=db.Database.SqlQuery<decimal?>("SELECT MAX(LecturaFinal) FROM dbo.AsignacionMedidor WHERE idMedidor=@id",P("@id",medidorId)).Single();
                 if(ultima.HasValue && op.Lectura<ultima) throw new ArgumentException("La lectura inicial no puede ser menor a la del último retiro.");
-                asignacion=db.Database.SqlQuery<int>(@"INSERT dbo.AsignacionMedidor(idMedidor,idServicioSocio,idSocio,FechaInicio,LecturaInicial,Origen)
-                    VALUES(@id,@conexion,@socio,@fecha,@lectura,'Registrada'); SELECT CAST(SCOPE_IDENTITY() AS int)",P("@id",medidorId),P("@conexion",op.idServicioSocio),P("@socio",conexion.idSocio),P("@fecha",fecha),P("@lectura",op.Lectura)).Single();
-                db.Database.ExecuteSqlCommand("UPDATE dbo.Medidor SET idServicioSocio=@conexion,Activo=1,FechaInstalacion=@fecha WHERE idMedidor=@id",P("@conexion",op.idServicioSocio),P("@fecha",fecha),P("@id",medidorId));
+                asignacion=db.Database.SqlQuery<int>(@"INSERT dbo.AsignacionMedidor(idMedidor,idServicioSocio,FechaInicio,LecturaInicial,Origen)
+                    VALUES(@id,@conexion,@fecha,@lectura,'Registrada'); SELECT CAST(SCOPE_IDENTITY() AS int)",P("@id",medidorId),P("@conexion",op.idServicioSocio),P("@fecha",fecha),P("@lectura",op.Lectura)).Single();
             } else if(accion=="Retirar") {
                 if(antes?.idAsignacion==null) throw new ArgumentException("El medidor no tiene instalación activa.");
                 if(db.Database.SqlQuery<int>(@"SELECT 1 FROM dbo.RutaMedicionDetalle d JOIN dbo.RutaMedicion r ON r.idRutaMedicion=d.idRutaMedicion WHERE d.idMedidor=@id AND r.Estado NOT IN ('Finalizada','Cancelada')",P("@id",medidorId)).Any()) throw new ArgumentException("Cerrá o cancelá las hojas de ruta abiertas antes de retirar el medidor.");
@@ -189,7 +189,6 @@ namespace CooperativaAPI.Controllers
                 if(!op.Lectura.HasValue || op.Lectura<minimo) throw new ArgumentException("Indicá la lectura final, no menor a la última registrada.");
                 if(!new[]{"Operativo","PendienteRevision","Averiado"}.Contains(op.EstadoFisico)) throw new ArgumentException("Indicá la condición del medidor retirado.");
                 db.Database.ExecuteSqlCommand("UPDATE dbo.AsignacionMedidor SET Cerrada=1,FechaFin=@fecha,LecturaFinal=@lectura WHERE idAsignacion=@id",P("@fecha",fecha),P("@lectura",op.Lectura),P("@id",asignacion));
-                db.Database.ExecuteSqlCommand("UPDATE dbo.Medidor SET idServicioSocio=NULL,Activo=0 WHERE idMedidor=@id",P("@id",medidorId));
                 db.Database.ExecuteSqlCommand("UPDATE dbo.FichaMedidor SET EstadoFisico=@estado WHERE idMedidor=@id",P("@estado",op.EstadoFisico),P("@id",medidorId));
             } else {
                 if(antes==null) throw new ArgumentException("Seleccioná un medidor.");
@@ -216,7 +215,7 @@ namespace CooperativaAPI.Controllers
             var nuevo=Ficha(db,medidorId);
             db.Database.ExecuteSqlCommand(@"INSERT dbo.EventoMedidor(idMedidor,FechaUtc,Accion,idUsuarioSistema,idMotivo,Motivo,Detalle,idAsignacion,ReferenciaTrabajo,Anterior,Nuevo,OperacionId)
                 VALUES(@id,@fecha,@accion,@usuario,@motivoId,@motivo,@detalle,@asignacion,@trabajo,@anterior,@nuevo,@operacion)",
-                P("@id",medidorId),P("@fecha",fecha),P("@accion",accion),P("@usuario",Usuario(user)),P("@motivoId",op.idMotivo),P("@motivo",motivo.Nombre),
+                P("@id",medidorId),P("@fecha",fecha),P("@accion",accion),P("@usuario",Usuario(user)),P("@motivoId",(object)motivo?.idMotivo),P("@motivo",motivo?.Nombre),
                 P("@detalle",Texto(op.Detalle)),P("@asignacion",asignacion),P("@trabajo",Texto(op.ReferenciaTrabajo)),P("@anterior",antes==null?null:JsonConvert.SerializeObject(antes)),P("@nuevo",JsonConvert.SerializeObject(nuevo)),P("@operacion",eventOperationId));
             var conexionEvento=antes?.idServicioSocio??nuevo.idServicioSocio;
             int? servicioEvento=conexionEvento.HasValue?db.ServicioSocio.Where(s=>s.idServicioSocio==conexionEvento.Value).Select(s=>(int?)s.idServicio).SingleOrDefault():null;
@@ -225,7 +224,7 @@ namespace CooperativaAPI.Controllers
             EventoOperativoStore.Registrar(db,user,new EventoOperativoNuevo {
                 Contexto=contextoMotive,CodigoEvento=motivoAccion??accion,Entidad="Medidor",idEntidad=medidorId.ToString(),Area=areaEvento,
                 idSocio=antes?.idSocio??nuevo.idSocio,idServicio=servicioEvento,idServicioSocio=conexionEvento,idMedidor=medidorId,
-                EstadoAnterior=antes?.EstadoFisico,EstadoNuevo=nuevo.EstadoFisico,MotivoNombre=motivo.Nombre,MotivoRequerido=true,
+                EstadoAnterior=antes?.EstadoFisico,EstadoNuevo=nuevo.EstadoFisico,MotivoNombre=motivo?.Nombre,MotivoRequerido=requiereMotivo,
                 OperacionId=eventOperationId,Resultado=accion,Detalle=Texto(op.Detalle),Datos=new{operacionId=eventOperationId,accion,motivoAccion,idAsignacion=asignacion,ReferenciaTrabajo=op.ReferenciaTrabajo}
             });
             return nuevo;
@@ -295,10 +294,11 @@ namespace CooperativaAPI.Controllers
                 FROM dbo.EventoMedidor e LEFT JOIN dbo.UsuarioSistema u ON u.idUsuarioSistema=e.idUsuarioSistema
                 LEFT JOIN dbo.MotivoMedidor mot ON mot.idMotivo=e.idMotivo WHERE e.idMedidor=@id ORDER BY e.FechaUtc DESC,e.idEvento DESC",OperacionesMedidor.P("@id",id)).ToList();
             foreach(var e in eventos) { e.FechaUtc=DateTime.SpecifyKind(e.FechaUtc,DateTimeKind.Utc); e.FechaRegistroUtc=DateTime.SpecifyKind(e.FechaRegistroUtc,DateTimeKind.Utc); }
-            var asignaciones=db.Database.SqlQuery<AsignacionMedidorDto>(@"SELECT a.*,CONCAT(p.Nombre,' ',p.Apellido) Socio,se.Nombre Servicio,
+            var asignaciones=db.Database.SqlQuery<AsignacionMedidorDto>(@"SELECT a.*,ss.idSocio,CONCAT(p.Nombre,' ',p.Apellido) Socio,se.Nombre Servicio,
                 (SELECT TOP 1 u.Direccion FROM dbo.UbicacionServicio u WHERE u.idServicioSocio=a.idServicioSocio ORDER BY u.idServicioSocio) Direccion
-                FROM dbo.AsignacionMedidor a JOIN dbo.Socio so ON so.idSocio=a.idSocio JOIN dbo.Persona p ON p.idPersona=so.idPersona
-                JOIN dbo.ServicioSocio ss ON ss.idServicioSocio=a.idServicioSocio JOIN dbo.Servicio se ON se.idServicio=ss.idServicio
+                FROM dbo.AsignacionMedidor a JOIN dbo.ServicioSocio ss ON ss.idServicioSocio=a.idServicioSocio
+                JOIN dbo.Socio so ON so.idSocio=ss.idSocio JOIN dbo.Persona p ON p.idPersona=so.idPersona
+                JOIN dbo.Servicio se ON se.idServicio=ss.idServicio
                 WHERE a.idMedidor=@id ORDER BY a.idAsignacion DESC",OperacionesMedidor.P("@id",id)).ToList();
             foreach(var a in asignaciones) {
                 if(a.FechaInicio.HasValue) a.FechaInicio=DateTime.SpecifyKind(a.FechaInicio.Value,DateTimeKind.Utc);
@@ -309,7 +309,7 @@ namespace CooperativaAPI.Controllers
         [HttpGet,Route("catalogos")]
         public IHttpActionResult Catalogos() {
             if(!OperacionesMedidor.PuedeOperar(db,Principal)) return StatusCode(HttpStatusCode.Forbidden);
-            return Ok(new {tipos=db.TipoMedidor.Select(t=>new {t.idTipoMedidor,t.Nombre}).ToList(),motivos=db.Database.SqlQuery<MotivoMedidorDto>("SELECT * FROM dbo.MotivoMedidor ORDER BY Accion,Nombre").ToList()});
+            return Ok(new {tipos=db.TipoMedidor.Select(t=>new {t.idTipoMedidor,t.Nombre}).ToList(),motivos=db.Database.SqlQuery<MotivoMedidorDto>("SELECT idMotivo,Nombre,Accion,Activo FROM dbo.MotivoMedidor ORDER BY Accion,Nombre").ToList()});
         }
         [HttpPost,Route("")]
         public IHttpActionResult Crear(OperacionMedidor op) { if(op!=null) op.Accion="Alta"; return Guardar(null,op); }
@@ -351,28 +351,6 @@ namespace CooperativaAPI.Controllers
                 catch(DBConcurrencyException ex) { return Content(HttpStatusCode.Conflict,ex.Message); }
                 catch(UnauthorizedAccessException) { return StatusCode(HttpStatusCode.Forbidden); }
                 catch(SqlException ex) when(ex.Number==2601 || ex.Number==2627 || ex.Number==1205 || ex.Number==547 || ex.Number==51001) { return Content(HttpStatusCode.Conflict,"La operación entra en conflicto con los datos actuales. Actualizá y revisá fechas y asignaciones."); }
-            }
-        }
-        [HttpPost,Route("motivos")]
-        [JwtAuthorize(Roles="Administrador")]
-        public IHttpActionResult Motivo(MotivoMedidorDto item) {
-            if(item==null || !ModelState.IsValid || OperacionesMedidor.Texto(item.Nombre).Length==0 || OperacionesMedidor.Texto(item.Nombre).Length>100 || !new[]{"Alta","Verificar","Editar","Instalar","Reemplazar","Retirar","Falla","Reparacion","Revision","BajaDefinitiva"}.Contains(item.Accion)) return BadRequest("Indicá nombre y acción válidos.");
-            using(var tx=db.Database.BeginTransaction(IsolationLevel.Serializable)) {
-                try {
-                    int id;
-                    if(item.idMotivo==0) id=db.Database.SqlQuery<int>("INSERT dbo.MotivoMedidor(Nombre,Accion,Activo) OUTPUT INSERTED.idMotivo VALUES(@nombre,@accion,1)",OperacionesMedidor.P("@nombre",OperacionesMedidor.Texto(item.Nombre)),OperacionesMedidor.P("@accion",item.Accion)).Single();
-                    else {
-                        var actual=db.Database.SqlQuery<MotivoMedidorDto>("SELECT * FROM dbo.MotivoMedidor WHERE idMotivo=@id",OperacionesMedidor.P("@id",item.idMotivo)).SingleOrDefault();
-                        if(actual==null) return NotFound();
-                        if(item.Version==null || !actual.Version.SequenceEqual(item.Version)) return Content(HttpStatusCode.Conflict,"El motivo cambió. Actualizá.");
-                        if(actual.Nombre!=item.Nombre || actual.Accion!=item.Accion) return BadRequest("Los motivos utilizados se conservan. Desactivalo y creá otro si cambia su significado.");
-                        id=item.idMotivo;
-                        db.Database.ExecuteSqlCommand("UPDATE dbo.MotivoMedidor SET Activo=@activo WHERE idMotivo=@id",OperacionesMedidor.P("@activo",item.Activo),OperacionesMedidor.P("@id",id));
-                    }
-                    db.Database.ExecuteSqlCommand(@"INSERT dbo.HistorialTerritorial(idUsuarioSistema,Usuario,Entidad,idEntidad,Accion,Motivo,Nuevo)
-                        SELECT idUsuarioSistema,Usuario,'MotivoMedidor',@id,'Configurar','Configuración de catálogo',@nuevo FROM dbo.UsuarioSistema WHERE idUsuarioSistema=@usuario",OperacionesMedidor.P("@id",id),OperacionesMedidor.P("@nuevo",JsonConvert.SerializeObject(item)),OperacionesMedidor.P("@usuario",OperacionesMedidor.Usuario(Principal)));
-                    tx.Commit(); return Ok(new {idMotivo=id});
-                } catch(SqlException ex) when(ex.Number==2601 || ex.Number==2627 || ex.Number==1205) { return Content(HttpStatusCode.Conflict,"Motivo duplicado o modificado simultáneamente."); }
             }
         }
         protected override void Dispose(bool disposing) { if(disposing) db.Dispose(); base.Dispose(disposing); }

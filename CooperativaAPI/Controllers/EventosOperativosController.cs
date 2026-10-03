@@ -37,7 +37,6 @@ namespace CooperativaAPI.Controllers
         public string Detalle { get; set; }
         public object Datos { get; set; }
         public bool ActorSistema { get; set; }
-        public DateTime? FechaUtc { get; set; }
     }
 
     public static class EventoOperativoStore
@@ -110,13 +109,13 @@ namespace CooperativaAPI.Controllers
             if (!item.ActorSistema && userId.GetValueOrDefault() == 0) throw new UnauthorizedAccessException();
             var responsibleEmployee = item.ActorSistema ? null : employeeId;
             return database.SqlQuery<long>(@"INSERT dbo.EventoOperativo
-                (Contexto,CodigoEvento,Entidad,idEntidad,FechaUtc,idUsuarioSistema,ActorSistema,idEmpleado,idEmpleadoActor,Area,idSocio,idServicio,idServicioSocio,idMedidor,idRutaMedicion,Folio,
+                (Contexto,CodigoEvento,Entidad,idEntidad,FechaEventoUtc,idUsuarioSistema,ActorSistema,idEmpleado,idEmpleadoActor,Area,idSocio,idServicio,idServicioSocio,idMedidor,idRutaMedicion,Folio,
                  EstadoAnterior,EstadoNuevo,idMotivoEvento,MotivoRegistrado,MotivoDesconocido,OperacionId,Resultado,Detalle,Datos,ClaveOrigen)
                 OUTPUT INSERTED.idEventoOperativo
-                VALUES(@contexto,@evento,@entidad,@entidadId,COALESCE(@fecha,SYSUTCDATETIME()),@usuario,@sistema,@empleado,@empleadoActor,@area,@socio,@servicio,@conexion,@medidor,@ruta,@folio,
+                VALUES(@contexto,@evento,@entidad,@entidadId,SYSUTCDATETIME(),@usuario,@sistema,@empleado,@empleadoActor,@area,@socio,@servicio,@conexion,@medidor,@ruta,@folio,
                  @anterior,@nuevo,@motivo,@motivoNombre,@desconocido,@operacion,@resultado,@detalle,@datos,@clave)",
                 P("@contexto", item.Contexto.Trim()), P("@evento", item.CodigoEvento.Trim()), P("@entidad", item.Entidad.Trim()), P("@entidadId", item.idEntidad.Trim()),
-                P("@fecha", item.FechaUtc), P("@usuario", userId), P("@sistema", item.ActorSistema), P("@empleado", item.idEmpleado ?? responsibleEmployee), P("@empleadoActor", responsibleEmployee), P("@area", item.Area),
+                P("@usuario", userId), P("@sistema", item.ActorSistema), P("@empleado", item.idEmpleado ?? responsibleEmployee), P("@empleadoActor", responsibleEmployee), P("@area", item.Area),
                 P("@socio", item.idSocio), P("@servicio", item.idServicio), P("@conexion", item.idServicioSocio), P("@medidor", item.idMedidor),
                 P("@ruta", item.idRutaMedicion), P("@folio", item.Folio), P("@anterior", item.EstadoAnterior), P("@nuevo", item.EstadoNuevo),
                 P("@motivo", motiveId), P("@motivoNombre", motiveName), P("@desconocido", item.MotivoDesconocido || motiveRequired && !motiveId.HasValue), P("@operacion", item.OperacionId),
@@ -180,31 +179,6 @@ namespace CooperativaAPI.Controllers
             return Ok(db.Database.SqlQuery<string>("SELECT DISTINCT e.Contexto FROM dbo.EventoOperativo e WHERE " + scope + " ORDER BY e.Contexto", parameters.ToArray()).ToList());
         }
 
-        [HttpPost, Route("motivos")]
-        public IHttpActionResult CrearMotivo(MotivoEventoOperativoDto item)
-        {
-            if (!PuedeAdministrar()) return StatusCode(HttpStatusCode.Forbidden);
-            if (item == null || !ModelState.IsValid || string.IsNullOrWhiteSpace(item.Contexto) || string.IsNullOrWhiteSpace(item.Nombre) ||
-                item.Contexto.Length > 60 || item.Nombre.Trim().Length > 150 || item.Orden < 0)
-                return BadRequest("Completá contexto, motivo y orden válidos.");
-            var knownEmptyContexts = new[] { "RECLAMO", "RECLAMO_DERIVACION", "RECLAMO_DEVOLUCION", "RECLAMO_RESOLUCION", "DOCUMENTO_PERSONA", "BAJA_SERVICIO", "BAJA_SOCIO", "EMPLEADO_BAJA", "HOJA_RUTA_CANCELACION", "HOJA_RUTA_REASIGNACION", "LECTURA_CORRECCION" };
-            if (!knownEmptyContexts.Contains(item.Contexto.Trim().ToUpperInvariant()) && !db.Database.SqlQuery<int>("SELECT 1 FROM dbo.MotivoEventoOperativo WHERE Contexto=@contexto", P("@contexto", item.Contexto.Trim().ToUpperInvariant())).Any())
-                return BadRequest("El contexto debe existir en un catÃ¡logo operativo configurado.");
-            var code = "USR_" + Guid.NewGuid().ToString("N").ToUpperInvariant();
-            try
-            {
-                var id = db.Database.SqlQuery<int>(@"INSERT dbo.MotivoEventoOperativo(Contexto,Codigo,Nombre,Orden,Activo,ConfirmadoCooperativa,RequiereDetalle,Origen,idUsuarioCreador)
-                    OUTPUT INSERTED.idMotivoEvento VALUES(@contexto,@codigo,@nombre,@orden,1,0,@detalle,'Administracion',@usuario)",
-                    P("@contexto", item.Contexto.Trim().ToUpperInvariant()), P("@codigo", code), P("@nombre", item.Nombre.Trim()), P("@orden", item.Orden),
-                    P("@detalle", item.RequiereDetalle), P("@usuario", LaboralAccess.Usuario(Principal))).Single();
-                return Ok(new { idMotivoEvento = id, Codigo = code, ConfirmadoCooperativa = false, mensaje = "Opción creada pendiente de validación de la cooperativa." });
-            }
-            catch (SqlException ex) when (ex.Number == 2601 || ex.Number == 2627)
-            {
-                return Content(HttpStatusCode.Conflict, "Ya existe una opción con el mismo nombre en este contexto.");
-            }
-        }
-
         [HttpPut, Route("motivos/{id:int}")]
         public IHttpActionResult ActualizarMotivo(int id, MotivoEventoOperativoDto item)
         {
@@ -259,11 +233,13 @@ namespace CooperativaAPI.Controllers
             if (!PuedeConsultar(f.Area)) return StatusCode(HttpStatusCode.Forbidden);
             var scope = Scope(f, out var parameters);
             parameters.Add(P("@offset", (pagina - 1) * tamano)); parameters.Add(P("@tamano", tamano));
-            var rows = db.Database.SqlQuery<EventoOperativoRegistro>(@"SELECT e.idEventoOperativo,e.Contexto,e.CodigoEvento,e.Entidad,e.idEntidad,e.FechaUtc,e.idUsuarioSistema,
-                u.Usuario,e.idEmpleado,e.idEmpleadoActor,e.Area,e.idSocio,e.idServicio,e.idServicioSocio,e.idMedidor,e.idRutaMedicion,e.Folio,e.EstadoAnterior,e.EstadoNuevo,
+            var rows = db.Database.SqlQuery<EventoOperativoRegistro>(@"SELECT e.idEventoOperativo,e.Contexto,e.CodigoEvento,e.Entidad,e.idEntidad,e.FechaEventoUtc,e.idUsuarioSistema,
+                u.Usuario,e.idEmpleado,e.idEmpleadoActor,e.ActorSistema,CONCAT(pa.Nombre,' ',pa.Apellido) EmpleadoActor,CONCAT(pt.Nombre,' ',pt.Apellido) EmpleadoRelacionado,e.Area,e.idSocio,e.idServicio,e.idServicioSocio,e.idMedidor,e.idRutaMedicion,e.Folio,e.EstadoAnterior,e.EstadoNuevo,
                 e.idMotivoEvento,COALESCE(e.MotivoRegistrado,m.Nombre) Motivo,e.MotivoDesconocido,e.OperacionId,e.Resultado,e.Detalle,e.Datos
-                FROM dbo.EventoOperativo e LEFT JOIN dbo.UsuarioSistema u ON u.idUsuarioSistema=e.idUsuarioSistema WHERE " + scope +
-                " ORDER BY e.FechaUtc DESC,e.idEventoOperativo DESC OFFSET @offset ROWS FETCH NEXT @tamano ROWS ONLY", parameters.ToArray()).ToList();
+                FROM dbo.EventoOperativo e LEFT JOIN dbo.UsuarioSistema u ON u.idUsuarioSistema=e.idUsuarioSistema
+                LEFT JOIN dbo.Empleado ea ON ea.idEmpleado=e.idEmpleadoActor LEFT JOIN dbo.Persona pa ON pa.idPersona=ea.idPersona
+                LEFT JOIN dbo.Empleado et ON et.idEmpleado=e.idEmpleado LEFT JOIN dbo.Persona pt ON pt.idPersona=et.idPersona WHERE " + scope +
+                " ORDER BY e.FechaEventoUtc DESC,e.idEventoOperativo DESC OFFSET @offset ROWS FETCH NEXT @tamano ROWS ONLY", parameters.ToArray()).ToList();
             return Ok(new { items = rows, pagina, tamano });
         }
 
@@ -278,7 +254,7 @@ namespace CooperativaAPI.Controllers
         private string Scope(EventoOperativoFiltro f, out List<SqlParameter> p)
         {
             p = new List<SqlParameter> { P("@desde", f.DesdeUtc), P("@hasta", f.HastaUtc), P("@contexto", f.Contexto), P("@evento", f.CodigoEvento), P("@area", f.Area), P("@empleado", f.idEmpleado), P("@servicio", f.idServicio), P("@conexion", f.idServicioSocio), P("@medidor", f.idMedidor), P("@ruta", f.idRutaMedicion), P("@motivo", f.idMotivoEvento), P("@folio", f.Folio) };
-            var where = "(@desde IS NULL OR e.FechaUtc>=@desde) AND (@hasta IS NULL OR e.FechaUtc<@hasta) AND (@contexto IS NULL OR e.Contexto=@contexto) AND (@evento IS NULL OR e.CodigoEvento=@evento) AND (@area IS NULL OR e.Area=@area) AND (@empleado IS NULL OR e.idEmpleado=@empleado OR e.idEmpleadoActor=@empleado) AND (@servicio IS NULL OR e.idServicio=@servicio) AND (@conexion IS NULL OR e.idServicioSocio=@conexion) AND (@medidor IS NULL OR e.idMedidor=@medidor) AND (@ruta IS NULL OR e.idRutaMedicion=@ruta) AND (@motivo IS NULL OR e.idMotivoEvento=@motivo) AND (@folio IS NULL OR e.Folio=@folio)";
+            var where = "(@desde IS NULL OR e.FechaEventoUtc>=@desde) AND (@hasta IS NULL OR e.FechaEventoUtc<@hasta) AND (@contexto IS NULL OR e.Contexto=@contexto) AND (@evento IS NULL OR e.CodigoEvento=@evento) AND (@area IS NULL OR e.Area=@area) AND (@empleado IS NULL OR e.idEmpleado=@empleado OR e.idEmpleadoActor=@empleado) AND (@servicio IS NULL OR e.idServicio=@servicio) AND (@conexion IS NULL OR e.idServicioSocio=@conexion) AND (@medidor IS NULL OR e.idMedidor=@medidor) AND (@ruta IS NULL OR e.idRutaMedicion=@ruta) AND (@motivo IS NULL OR e.idMotivoEvento=@motivo) AND (@folio IS NULL OR e.Folio=@folio)";
             if (!Principal.IsInRole("Administrador") && !LaboralAccess.Gerencia(db, Principal))
             {
                 var employee = LaboralAccess.Empleado(db, Principal);
@@ -368,11 +344,14 @@ namespace CooperativaAPI.Controllers
         public string CodigoEvento { get; set; }
         public string Entidad { get; set; }
         public string idEntidad { get; set; }
-        public DateTime FechaUtc { get; set; }
+        public DateTime FechaEventoUtc { get; set; }
         public int? idUsuarioSistema { get; set; }
         public string Usuario { get; set; }
         public int? idEmpleado { get; set; }
         public int? idEmpleadoActor { get; set; }
+        public bool ActorSistema { get; set; }
+        public string EmpleadoActor { get; set; }
+        public string EmpleadoRelacionado { get; set; }
         public string Area { get; set; }
         public int? idSocio { get; set; }
         public int? idServicio { get; set; }
