@@ -39,6 +39,7 @@ namespace CooperativaAPI.Controllers
             if (connection.State != ConnectionState.Open) connection.Open();
             using (var command = connection.CreateCommand())
             {
+                if (db.Database.CurrentTransaction != null) command.Transaction = (SqlTransaction)db.Database.CurrentTransaction.UnderlyingTransaction;
                 command.CommandText = sql; command.Parameters.AddRange(parameters);
                 var result = new List<JObject>();
                 using (var reader = command.ExecuteReader())
@@ -177,12 +178,14 @@ namespace CooperativaAPI.Controllers
                     int person = TargetPerson(userId); int count = db.Database.SqlQuery<int>(@"SELECT COUNT(DISTINCT t.Codigo) FROM dbo.TipoDocumentoPersona t JOIN dbo.DocumentoPersona d ON d.idTipoDocumentoPersona=t.idTipoDocumentoPersona WHERE d.idPersona=@p AND t.Codigo IN ('Domicilio','DniFrente','DniDorso') AND d.Estado<>'Rechazado' AND d.idDocumentoPersona=(SELECT MAX(x.idDocumentoPersona) FROM dbo.DocumentoPersona x WHERE x.idPersona=@p AND x.idTipoDocumentoPersona=t.idTipoDocumentoPersona)", P("@p", person)).Single();
                     if (count != 3) throw new ArgumentException("Faltan documentos requeridos para aprobar el alta.");
                     db.Database.ExecuteSqlCommand("UPDATE dbo.AltaSocio SET Estado='Aprobada',idMotivoRechazo=NULL,FechaDecisionUtc=SYSUTCDATETIME(),idUsuarioRevisor=@u WHERE idSocio=@s", P("@u", UsuarioId), P("@s", socio));
+                    db.Database.ExecuteSqlCommand("UPDATE dbo.Socio SET Activo=1 WHERE idSocio=@s", P("@s", socio));
                     db.Database.ExecuteSqlCommand(@"UPDATE d SET Estado='Aprobado',FechaRevisionUtc=SYSUTCDATETIME(),idUsuarioRevisor=@u FROM dbo.DocumentoPersona d JOIN dbo.TipoDocumentoPersona t ON t.idTipoDocumentoPersona=d.idTipoDocumentoPersona WHERE d.idPersona=(SELECT idPersona FROM dbo.Socio WHERE idSocio=@s) AND t.Codigo IN ('Domicilio','DniFrente','DniDorso') AND d.idDocumentoPersona=(SELECT MAX(x.idDocumentoPersona) FROM dbo.DocumentoPersona x WHERE x.idPersona=d.idPersona AND x.idTipoDocumentoPersona=d.idTipoDocumentoPersona)", P("@u", UsuarioId), P("@s", socio));
                 }
                 else
                 {
                     string code = (string)data["Motivo"]; var selected = One("SELECT idMotivo FROM dbo.MotivoRechazoAltaSocio WHERE Codigo=@c AND Activo=1", P("@c", code)); if (selected == null) throw new ArgumentException("Seleccioná un motivo de rechazo predefinido."); reason = (int)selected["idMotivo"];
                     db.Database.ExecuteSqlCommand("UPDATE dbo.AltaSocio SET Estado='Rechazada',idMotivoRechazo=@m,FechaDecisionUtc=SYSUTCDATETIME(),idUsuarioRevisor=@u WHERE idSocio=@s", P("@m", reason), P("@u", UsuarioId), P("@s", socio));
+                    db.Database.ExecuteSqlCommand("UPDATE dbo.Socio SET Activo=0 WHERE idSocio=@s", P("@s", socio));
                     db.Database.ExecuteSqlCommand(@"UPDATE d SET Estado='Rechazado',MotivoRechazo=(SELECT Nombre FROM dbo.MotivoRechazoAltaSocio WHERE idMotivo=@m),FechaRevisionUtc=SYSUTCDATETIME(),idUsuarioRevisor=@u FROM dbo.DocumentoPersona d WHERE d.idPersona=(SELECT idPersona FROM dbo.Socio WHERE idSocio=@s) AND d.idDocumentoPersona=(SELECT MAX(x.idDocumentoPersona) FROM dbo.DocumentoPersona x WHERE x.idPersona=d.idPersona AND x.idTipoDocumentoPersona=d.idTipoDocumentoPersona)", P("@m", reason), P("@u", UsuarioId), P("@s", socio));
                 }
                 db.Database.ExecuteSqlCommand(@"INSERT dbo.AltaSocioRevision(idSocio,Estado,idMotivo,idUsuarioRevisor)

@@ -5,6 +5,7 @@ using System.Data.SqlClient;
 using System.Linq;
 using System.Net;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Web.Http;
 using CooperativaAPI.Filters;
 using Newtonsoft.Json.Linq;
@@ -105,6 +106,85 @@ namespace CooperativaAPI.Controllers {
    Audit(string.IsNullOrEmpty(area)?null:area,null,"Configurar"+accion,null,null,motivo,data);
    return new{mensaje="Configuración guardada con historial."};
   });}
+
+  [HttpPost,Route("accesos/gerencia-administracion")]
+  public IHttpActionResult CrearAccesosGerenciaAdministracion(JObject data){
+   if(!Admin)return StatusCode(HttpStatusCode.Forbidden);
+   if(data==null)return BadRequest("Completá los datos de ambas personas.");
+   using(var tx=db.Database.BeginTransaction(IsolationLevel.Serializable)){
+    try{
+     var gerente=data["Gerente"] as JObject;var administrador=data["Administrador"] as JObject;
+     int personaGerente=CrearPersonaYEmpleado(gerente,"Gerente");
+     int personaAdministrador=CrearPersonaYEmpleado(administrador,"Administrador");
+     if(personaGerente==personaAdministrador)throw new ArgumentException("Gerencia y Administración deben corresponder a personas distintas.");
+     int empleadoGerente=db.Database.SqlQuery<int>("SELECT idEmpleado FROM dbo.Empleado WHERE idPersona=@p",P("@p",personaGerente)).Single();
+     int empleadoAdministrador=db.Database.SqlQuery<int>("SELECT idEmpleado FROM dbo.Empleado WHERE idPersona=@p",P("@p",personaAdministrador)).Single();
+     string passwordGerente=CrearPasswordTemporal();string passwordAdministrador=CrearPasswordTemporal();
+     int rolEmpleado=db.Database.SqlQuery<int>("SELECT idRol FROM dbo.Rol WHERE NombreRol='Empleado'").Single();
+     int rolAdministrador=db.Database.SqlQuery<int>("SELECT idRol FROM dbo.Rol WHERE NombreRol='Administrador'").Single();
+     string emailGerente=db.Database.SqlQuery<string>("SELECT Email FROM dbo.Persona WHERE idPersona=@p",P("@p",personaGerente)).Single();
+     string emailAdministrador=db.Database.SqlQuery<string>("SELECT Email FROM dbo.Persona WHERE idPersona=@p",P("@p",personaAdministrador)).Single();
+     InsertarCuentaLaboral(empleadoGerente,rolEmpleado,passwordGerente);
+     InsertarCuentaAdministrador(empleadoAdministrador,rolAdministrador,emailAdministrador,passwordAdministrador);
+     db.Database.ExecuteSqlCommand("INSERT dbo.EmpleadoArea(idEmpleado,Area,DesdeUtc) VALUES(@e,'GERENCIA',SYSUTCDATETIME()); INSERT dbo.EmpleadoFuncion(idEmpleadoArea,Funcion,DesdeUtc) SELECT SCOPE_IDENTITY(),'CONSULTA_GENERAL',SYSUTCDATETIME()",P("@e",empleadoGerente));
+     AuditarAltaAcceso(empleadoGerente,"AltaCuentaGerencia");AuditarAltaAcceso(empleadoAdministrador,"AltaCuentaAdministrador");
+     tx.Commit();
+     return Ok(new{mensaje="Se crearon los accesos. Guardá las contraseñas iniciales: no volverán a mostrarse.",gerente=new{usuario=emailGerente,contrasenaInicial=passwordGerente,rol="Empleado · Gerencia"},administrador=new{usuario=emailAdministrador,contrasenaInicial=passwordAdministrador,rol="Administrador del sistema"}});
+    }catch(ArgumentException ex){tx.Rollback();return BadRequest(ex.Message);}catch(InvalidOperationException){tx.Rollback();return BadRequest("No se encontró un rol o cargo requerido para crear los accesos.");}catch(SqlException ex) when(new[]{2601,2627,547}.Contains(ex.Number)){tx.Rollback();return Content(HttpStatusCode.Conflict,"El documento, correo o acceso ya está registrado. No se creó ningún usuario.");}catch(Exception ex){tx.Rollback();return BadRequest("No se pudieron crear los accesos: "+ex.Message);}
+   }
+  }
+
+  [HttpGet,Route("accesos/personas-disponibles")]
+  public IHttpActionResult PersonasDisponiblesParaAcceso(){
+   if(!Admin)return StatusCode(HttpStatusCode.Forbidden);
+   try{return Ok(Rows(@"SELECT p.idPersona,p.Nombre,p.Apellido,p.Documento,p.Email FROM dbo.Persona p
+    WHERE NULLIF(LTRIM(RTRIM(p.Email)),'') IS NOT NULL AND NOT EXISTS(SELECT 1 FROM dbo.Empleado e WHERE e.idPersona=p.idPersona)
+    ORDER BY p.Apellido,p.Nombre"));}catch{return BadRequest("No se pudieron cargar las personas registradas.");}
+  }
+
+  private int CrearPersonaYEmpleado(JObject person,string cargoNombre){
+   if(person==null)throw new ArgumentException("Faltan los datos de una de las personas.");
+   int? existing=(int?)person["idPersona"];
+   if(existing.HasValue){
+    if(db.Database.SqlQuery<int>("SELECT COUNT(1) FROM dbo.Persona WHERE idPersona=@p AND NULLIF(LTRIM(RTRIM(Email)),'') IS NOT NULL",P("@p",existing.Value)).Single()!=1)throw new ArgumentException("La persona seleccionada no existe o no tiene correo registrado.");
+    if(db.Database.SqlQuery<int>("SELECT COUNT(1) FROM dbo.Empleado WHERE idPersona=@p",P("@p",existing.Value)).Single()>0)throw new ArgumentException("La persona seleccionada ya figura como empleado.");
+    int existingCargo=db.Database.SqlQuery<int>("SELECT idCargo FROM dbo.Cargo WHERE NombreCargo=@n",P("@n",cargoNombre)).Single();
+    db.Database.ExecuteSqlCommand("INSERT dbo.Empleado(idPersona,FechaDelInicio,Activo,idCargo) VALUES(@p,CAST(GETDATE() AS date),1,@cargo)",P("@p",existing.Value),P("@cargo",existingCargo));
+    return existing.Value;
+   }
+   string nombre=Texto(person,"Nombre",100,true),apellido=Texto(person,"Apellido",100,true),documento=Texto(person,"Documento",30,true),email=Texto(person,"Email",150,true).ToLowerInvariant();
+   string telefono=Texto(person,"Telefono",40),calle=Texto(person,"Calle",120),numero=Texto(person,"Numero",20);
+   if(!System.Text.RegularExpressions.Regex.IsMatch(email,@"^[^\s@]+@[^\s@]+\.[^\s@]+$"))throw new ArgumentException("Ingresá un correo válido para cada persona.");
+   if(db.Database.SqlQuery<int>("SELECT COUNT(1) FROM dbo.Persona WHERE Documento=@d OR Email=@e",P("@d",documento),P("@e",email)).Single()>0)throw new ArgumentException("El documento o correo ya pertenece a una persona registrada. Revisá los datos antes de volver a intentar.");
+   int cargo=db.Database.SqlQuery<int>("SELECT idCargo FROM dbo.Cargo WHERE NombreCargo=@n",P("@n",cargoNombre)).Single();
+   var connection=(SqlConnection)db.Database.Connection;
+   using(var command=connection.CreateCommand()){
+    command.Transaction=(SqlTransaction)db.Database.CurrentTransaction.UnderlyingTransaction;
+    command.CommandText=@"INSERT dbo.Persona(Nombre,Apellido,Documento,Telefono,Email,Calle,Numero) OUTPUT INSERTED.idPersona VALUES(@n,@a,@d,@t,@e,@c,@num)";
+    command.Parameters.AddRange(new[]{P("@n",nombre),P("@a",apellido),P("@d",documento),P("@t",(object)telefono??DBNull.Value),P("@e",email),P("@c",(object)calle??DBNull.Value),P("@num",(object)numero??DBNull.Value)});
+    int persona=(int)command.ExecuteScalar();
+    command.Parameters.Clear();command.CommandText="INSERT dbo.Empleado(idPersona,FechaDelInicio,Activo,idCargo) OUTPUT INSERTED.idEmpleado VALUES(@p,CAST(GETDATE() AS date),1,@cargo)";command.Parameters.AddRange(new[]{P("@p",persona),P("@cargo",cargo)});
+    command.ExecuteNonQuery();return persona;
+   }
+  }
+  private void InsertarCuentaLaboral(int empleado,int rol,string password){
+   db.Database.ExecuteSqlCommand("INSERT dbo.UsuarioSistema(Usuario,Contrasenia,idRol,idSocio,idEmpleado) VALUES(@u,@p,@r,NULL,@e)",P("@u","laboral-"+empleado),P("@p",CooperativaAPI.Helpers.PasswordHelpers.Hashear(password)),P("@r",rol),P("@e",empleado));
+  }
+  private void InsertarCuentaAdministrador(int empleado,int rol,string usuario,string password){
+   db.Database.ExecuteSqlCommand("INSERT dbo.UsuarioSistema(Usuario,Contrasenia,idRol,idSocio,idEmpleado) VALUES(@u,@p,@r,NULL,@e)",P("@u",usuario),P("@p",CooperativaAPI.Helpers.PasswordHelpers.Hashear(password)),P("@r",rol),P("@e",empleado));
+  }
+  private void AuditarAltaAcceso(int empleado,string accion){
+   db.Database.ExecuteSqlCommand("INSERT dbo.AuditoriaLaboral(Area,idUsuarioSistema,idEmpleado,Accion,EstadoNuevo,Motivo,Datos) VALUES('GERENCIA',@u,@e,@a,'Activo','Alta de acceso desde Administración',N'{\"Origen\":\"Administracion\"}')",P("@u",LaboralAccess.Usuario(Principal)),P("@e",empleado),P("@a",accion));
+  }
+  private static string CrearPasswordTemporal(){
+   const string mayus="ABCDEFGHJKLMNPQRSTUVWXYZ",minus="abcdefghijkmnopqrstuvwxyz",numeros="23456789",simbolos="!#$%&*+-=?@";
+   var chars=new List<char>{Elegir(mayus),Elegir(minus),Elegir(numeros),Elegir(simbolos)};string todos=mayus+minus+numeros+simbolos;
+   while(chars.Count<16)chars.Add(Elegir(todos));
+   for(int i=chars.Count-1;i>0;i--){int j=NumeroSeguro(i+1);char c=chars[i];chars[i]=chars[j];chars[j]=c;}
+   return new string(chars.ToArray());
+  }
+  private static char Elegir(string chars){return chars[NumeroSeguro(chars.Length)];}
+  private static int NumeroSeguro(int max){var b=new byte[4];using(var rng=RandomNumberGenerator.Create()){rng.GetBytes(b);}return (int)(BitConverter.ToUInt32(b,0)%(uint)max);}
 
   [HttpGet,Route("lecturistas")]
   public IHttpActionResult Lecturistas(string area){return Read(()=>{

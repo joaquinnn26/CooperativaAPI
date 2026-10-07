@@ -209,6 +209,7 @@
     <Compile Include="Controllers\EmpleadoController.cs" />
     <Compile Include="Controllers\EstadoSolicitudController.cs" />
     <Compile Include="Controllers\FacturaController.cs" />
+    <Compile Include="Controllers\IntercambioFacturacionController.cs" />
     <Compile Include="Controllers\HomeController.cs" />
     <Compile Include="Controllers\MedicionController.cs" />
     <Compile Include="Controllers\MedidorController.cs" />
