@@ -226,4 +226,27 @@ IF OBJECT_ID('dbo.RutaMedicion','U') IS NOT NULL AND OBJECT_ID('dbo.ExpirarRutas
         WHERE NOT EXISTS(SELECT 1 FROM dbo.EventoOperativo e WHERE e.ClaveOrigen=CONCAT(''RutaCaducidad:'',x.idRutaMedicion));
     END');
 
+-- Incorpora las altas de socios existentes para que el tablero no comience vacío.
+IF OBJECT_ID('dbo.Socio','U') IS NOT NULL
+    INSERT dbo.EventoOperativo(Contexto,CodigoEvento,Entidad,idEntidad,FechaEventoUtc,ActorSistema,Area,idSocio,EstadoNuevo,Datos,ClaveOrigen)
+    SELECT 'SOCIO_ALTA','SocioRegistrado','Socio',CONVERT(nvarchar(80),s.idSocio),CONVERT(datetime2(3),s.FechaAlta),1,'ADMINISTRACION',s.idSocio,
+           CASE WHEN s.Activo=1 THEN 'Activo' ELSE 'Pendiente o inactivo' END,
+           (SELECT s.Activo Activo FOR JSON PATH,WITHOUT_ARRAY_WRAPPER),CONCAT('SocioAlta:',s.idSocio)
+    FROM dbo.Socio s
+    WHERE NOT EXISTS(SELECT 1 FROM dbo.EventoOperativo e WHERE e.ClaveOrigen IN (CONCAT('SocioAlta:',s.idSocio),CONCAT('API:SocioAlta:',s.idSocio)));
+
+-- Conserva también decisiones históricas de altas y sus motivos seleccionados.
+IF OBJECT_ID('dbo.AltaSocioRevision','U') IS NOT NULL AND OBJECT_ID('dbo.MotivoRechazoAltaSocio','U') IS NOT NULL
+    INSERT dbo.EventoOperativo(Contexto,CodigoEvento,Entidad,idEntidad,FechaEventoUtc,idUsuarioSistema,ActorSistema,idEmpleadoActor,Area,idSocio,EstadoNuevo,idMotivoEvento,MotivoRegistrado,MotivoDesconocido,Datos,ClaveOrigen)
+    SELECT CASE WHEN r.Estado='Rechazada' THEN 'ALTA_SOCIO_RECHAZO' ELSE 'ALTA_SOCIO_REVISION' END,
+           CASE WHEN r.Estado='Rechazada' THEN 'AltaSocioRechazada' ELSE 'AltaSocioAprobada' END,
+           'AltaSocio',CONVERT(nvarchar(80),r.idSocio),r.FechaUtc,r.idUsuarioRevisor,0,u.idEmpleado,'ADMINISTRACION',r.idSocio,r.Estado,
+           m.idMotivoEvento,COALESCE(m.Nombre,mr.Nombre),CASE WHEN r.Estado='Rechazada' AND m.idMotivoEvento IS NULL THEN 1 ELSE 0 END,
+           (SELECT r.idRevision FOR JSON PATH,WITHOUT_ARRAY_WRAPPER),CONCAT('AltaSocioRevision:',r.idRevision)
+    FROM dbo.AltaSocioRevision r
+    LEFT JOIN dbo.MotivoRechazoAltaSocio mr ON mr.idMotivo=r.idMotivo
+    LEFT JOIN dbo.MotivoEventoOperativo m ON m.Contexto='ALTA_SOCIO_RECHAZO' AND m.NombreNormalizado=UPPER(LTRIM(RTRIM(mr.Nombre)))
+    LEFT JOIN dbo.UsuarioSistema u ON u.idUsuarioSistema=r.idUsuarioRevisor
+    WHERE NOT EXISTS(SELECT 1 FROM dbo.EventoOperativo e WHERE e.ClaveOrigen IN (CONCAT('AltaSocioRevision:',r.idRevision),CONCAT('API:AltaSocioRevision:',r.idRevision)));
+
 COMMIT;

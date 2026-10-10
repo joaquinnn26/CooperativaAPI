@@ -47,13 +47,15 @@ namespace CooperativaAPI.Controllers {
   private void Audit(string area,int? task,string action,string before,string after,string reason,object data=null){LaboralAccess.Auditar(db,Principal,area,task,action,before,after,reason,data);}
 
   [HttpGet,Route("perfil")]
-  public IHttpActionResult Perfil(){return Read(()=>{Exigir(!User.IsInRole("Socio"));return new {idEmpleado=Empleado,areas=LaboralAccess.Perfil(db,Principal),configurar=Admin};});}
+  public IHttpActionResult Perfil(){return Read(()=>{Exigir(!User.IsInRole("Socio"));return new {idEmpleado=Empleado,areas=LaboralAccess.Perfil(db,Principal),cargo=db.Empleado.Where(e=>e.idEmpleado==Empleado).Select(e=>e.Cargo.NombreCargo).FirstOrDefault(),configurar=Admin};});}
 
   [HttpGet,Route("configuracion")]
   public IHttpActionResult Configuracion(){return Read(()=>{Exigir(Admin);return new {
    areas=Rows("SELECT * FROM dbo.AreaLaboral ORDER BY Nombre"),
+   puestos=Rows("SELECT * FROM dbo.PuestoArea ORDER BY Area,EsEncargado DESC,Nombre"),
+   puestoFunciones=Rows("SELECT p.Area,p.Puesto,p.Funcion,f.Nombre FROM dbo.PuestoFuncion p JOIN dbo.FuncionLaboral f ON f.Codigo=p.Funcion"),
    funciones=Rows("SELECT a.Area,f.* FROM dbo.FuncionArea a JOIN dbo.FuncionLaboral f ON f.Codigo=a.Funcion"),
-   empleados=Rows("SELECT e.idEmpleado,e.idPersona,e.Activo,c.NombreCargo Cargo,CONCAT(p.Nombre,' ',p.Apellido) Nombre FROM dbo.Empleado e JOIN dbo.Persona p ON p.idPersona=e.idPersona JOIN dbo.Cargo c ON c.idCargo=e.idCargo ORDER BY p.Apellido,p.Nombre"),
+   empleados=Rows("SELECT e.idEmpleado,e.idPersona,e.Activo,e.VersionAsignacion Version,c.NombreCargo Cargo,CONCAT(p.Nombre,' ',p.Apellido) Nombre FROM dbo.Empleado e JOIN dbo.Persona p ON p.idPersona=e.idPersona LEFT JOIN dbo.Cargo c ON c.idCargo=e.idCargo ORDER BY p.Apellido,p.Nombre"),
    miembros=Rows("SELECT * FROM dbo.EmpleadoArea ORDER BY idEmpleadoArea DESC"),
    permisos=Rows("SELECT * FROM dbo.EmpleadoFuncion ORDER BY idEmpleadoFuncion DESC"),
    encargados=Rows("SELECT * FROM dbo.EncargadoArea ORDER BY idEncargadoArea DESC"),
@@ -65,6 +67,7 @@ namespace CooperativaAPI.Controllers {
   [HttpPost,Route("configuracion")]
   public IHttpActionResult Configurar(JObject data){return Write(()=>{
    Exigir(Admin);var accion=Texto(data,"Accion",40,true);var area=Texto(data,"Area",30);var motivo=Texto(data,"Motivo",500,true);
+   if(new[]{"Miembro","Funcion","Encargado"}.Contains(accion))throw new ArgumentException("Usá la asignación conjunta de área y puesto. Los permisos se configuran automáticamente.");
    if(accion=="Cuenta"){
     int id=(int?)data["idEmpleado"]??0;Exigir(db.Empleado.Any(e=>e.idEmpleado==id && e.Activo==true));
     string password=(string)data["Password"];
@@ -97,14 +100,64 @@ namespace CooperativaAPI.Controllers {
      if(Rows("SELECT 1 existe FROM dbo.AreaServicio WHERE idServicio=@id",P("@id",id)).Any())throw new ArgumentException("El servicio ya tiene área. Un cambio de sector requiere revisar sus tareas y rutas existentes.");
      db.Database.ExecuteSqlCommand("INSERT dbo.AreaServicio(idServicio,Area) VALUES(@id,@a)",P("@id",id),P("@a",area));
     } else if(accion=="Motivo"){
-     string decision=Texto(data,"Decision",30,true);if(!new[]{"Rechazar","Devolver","CorregirLectura"}.Contains(decision))throw new ArgumentException("Decisión inválida.");
-     int? id=(int?)data["idMotivo"];
-     if(id.HasValue){var actual=Row("SELECT * FROM dbo.MotivoLaboral WHERE idMotivo=@id AND Area=@a",P("@id",id),P("@a",area));Version(actual,data);db.Database.ExecuteSqlCommand("UPDATE dbo.MotivoLaboral SET Activo=@activo WHERE idMotivo=@id",P("@activo",(bool?)data["Activo"]??false),P("@id",id));}
-     else throw new ArgumentException("Los motivos se eligen del catálogo estadístico predefinido; no se permiten categorías de texto libre.");
+     throw new ArgumentException("Los motivos están precargados en la base de datos y no se pueden crear, modificar, activar ni desactivar desde la aplicación.");
     } else throw new ArgumentException("Acción de configuración inválida.");
    }
    Audit(string.IsNullOrEmpty(area)?null:area,null,"Configurar"+accion,null,null,motivo,data);
    return new{mensaje="Configuración guardada con historial."};
+  });}
+
+  private void CerrarAsignacion(int empleado) {
+   db.Database.ExecuteSqlCommand(@"DECLARE @now datetime2(3)=SYSUTCDATETIME();
+    UPDATE f SET HastaUtc=@now FROM dbo.EmpleadoFuncion f JOIN dbo.EmpleadoArea a ON a.idEmpleadoArea=f.idEmpleadoArea WHERE a.idEmpleado=@e AND a.HastaUtc IS NULL AND f.HastaUtc IS NULL;
+    UPDATE dbo.AreaLaboral SET Nombre=Nombre WHERE Codigo IN(SELECT Area FROM dbo.EmpleadoArea WHERE idEmpleado=@e AND HastaUtc IS NULL);
+    UPDATE dbo.EncargadoArea SET HastaUtc=@now WHERE idEmpleado=@e AND HastaUtc IS NULL;
+    UPDATE dbo.EmpleadoArea SET HastaUtc=@now WHERE idEmpleado=@e AND HastaUtc IS NULL;
+    UPDATE dbo.Empleado SET idCargo=NULL WHERE idEmpleado=@e;",P("@e",empleado));
+  }
+  [HttpPost,Route("asignacion")]
+  public IHttpActionResult AsignarPuesto(JObject data){return Write(()=>{
+   Exigir(Admin);
+   int id=(int?)data?["idEmpleado"]??0;
+   string area=Texto(data,"Area",30,true),puesto=Texto(data,"Puesto",30,true),motivo=Texto(data,"Motivo",500,true);
+   var empleado=Row("SELECT idEmpleado,Activo,VersionAsignacion Version FROM dbo.Empleado WITH(UPDLOCK,HOLDLOCK) WHERE idEmpleado=@e",P("@e",id));
+   Exigir((bool?)empleado["Activo"]==true);Version(empleado,data);
+   var destino=Row("SELECT * FROM dbo.AreaLaboral WITH(UPDLOCK,HOLDLOCK) WHERE Codigo=@a",P("@a",area));
+   var perfil=Row("SELECT * FROM dbo.PuestoArea WHERE Area=@a AND Codigo=@p",P("@a",area),P("@p",puesto));
+   var anterior=Rows("SELECT Area,Puesto FROM dbo.EmpleadoArea WHERE idEmpleado=@e AND HastaUtc IS NULL",P("@e",id)).SingleOrDefault();
+   if(anterior!=null && ((string)anterior["Area"]!=area || (string)anterior["Puesto"]!=puesto) && (bool?)data["ConfirmarTraslado"]!=true)
+    throw new ArgumentException("Confirmá el cambio de área o puesto: finalizará la asignación anterior.");
+   var actual=Rows("SELECT idEmpleado FROM dbo.EncargadoArea WHERE Area=@a AND HastaUtc IS NULL",P("@a",area)).SingleOrDefault();
+   if((bool)perfil["EsEncargado"]){
+    if((string)data["VersionArea"]!=(string)destino["Version"])throw new DBConcurrencyException("El encargado cambió. Actualizá antes de guardar.");
+    if(actual!=null && (int)actual["idEmpleado"]!=id){
+     if((bool?)data["ReemplazarEncargado"]!=true)throw new ArgumentException("Confirmá el reemplazo del encargado. El anterior quedará pendiente de asignación.");
+     int previo=(int)actual["idEmpleado"];
+     CerrarAsignacion(previo);
+     Audit(area,null,"ReemplazarEncargado","Encargado","Pendiente de asignación",motivo,new{idEmpleado=previo,nuevoEncargado=id});
+    }
+   }
+   if(area=="GERENCIA" && Rows("SELECT idEmpleado FROM dbo.EmpleadoArea WHERE Area='GERENCIA' AND HastaUtc IS NULL AND idEmpleado<>@e",P("@e",id)).Any())
+    throw new ArgumentException("Gerencia ya tiene un empleado asignado. Finalizá esa asignación antes de designar otro gerente.");
+   CerrarAsignacion(id);
+   db.Database.ExecuteSqlCommand(@"INSERT dbo.EmpleadoArea(idEmpleado,Area,Puesto,DesdeUtc) VALUES(@e,@a,@p,SYSUTCDATETIME());
+    DECLARE @miembro int=CONVERT(int,SCOPE_IDENTITY());
+    INSERT dbo.EmpleadoFuncion(idEmpleadoArea,Funcion,DesdeUtc) SELECT @miembro,Funcion,SYSUTCDATETIME() FROM dbo.PuestoFuncion WHERE Area=@a AND Puesto=@p;
+    UPDATE dbo.Empleado SET idCargo=@cargo WHERE idEmpleado=@e;
+    UPDATE dbo.AreaLaboral SET Nombre=Nombre WHERE Codigo=@a;",P("@e",id),P("@a",area),P("@p",puesto),P("@cargo",(int)perfil["idCargo"]));
+   if((bool)perfil["EsEncargado"])db.Database.ExecuteSqlCommand("INSERT dbo.EncargadoArea(Area,idEmpleado,DesdeUtc,Motivo) VALUES(@a,@e,SYSUTCDATETIME(),@m)",P("@a",area),P("@e",id),P("@m",motivo));
+   Audit(area,null,anterior==null?"AsignarPuesto":"CambiarAsignacion",anterior==null?"Pendiente":(string)anterior["Area"]+" / "+(string)anterior["Puesto"],area+" / "+puesto,motivo,new{idEmpleado=id});
+   return new{mensaje="Área y puesto asignados. Los permisos se configuraron automáticamente."};
+  });}
+  [HttpPost,Route("asignacion/finalizar")]
+  public IHttpActionResult FinalizarAsignacion(JObject data){return Write(()=>{
+   Exigir(Admin);int id=(int?)data?["idEmpleado"]??0;string motivo=Texto(data,"Motivo",500,true);
+   var empleado=Row("SELECT VersionAsignacion Version FROM dbo.Empleado WITH(UPDLOCK,HOLDLOCK) WHERE idEmpleado=@e",P("@e",id));Version(empleado,data);
+   var anterior=Rows("SELECT Area FROM dbo.EmpleadoArea WHERE idEmpleado=@e AND HastaUtc IS NULL",P("@e",id)).SingleOrDefault();
+   if(anterior==null)throw new ArgumentException("El empleado ya está pendiente de asignación.");
+   CerrarAsignacion(id);
+   Audit((string)anterior["Area"],null,"FinalizarAsignacion",(string)anterior["Area"],"Pendiente de asignación",motivo,new{idEmpleado=id});
+   return new{mensaje="La asignación finalizó. El empleado conserva su cuenta y queda sin área ni cargo."};
   });}
 
   [HttpPost,Route("accesos/gerencia-administracion")]
@@ -126,7 +179,7 @@ namespace CooperativaAPI.Controllers {
      string emailAdministrador=db.Database.SqlQuery<string>("SELECT Email FROM dbo.Persona WHERE idPersona=@p",P("@p",personaAdministrador)).Single();
      InsertarCuentaLaboral(empleadoGerente,rolEmpleado,passwordGerente);
      InsertarCuentaAdministrador(empleadoAdministrador,rolAdministrador,emailAdministrador,passwordAdministrador);
-     db.Database.ExecuteSqlCommand("INSERT dbo.EmpleadoArea(idEmpleado,Area,DesdeUtc) VALUES(@e,'GERENCIA',SYSUTCDATETIME()); INSERT dbo.EmpleadoFuncion(idEmpleadoArea,Funcion,DesdeUtc) SELECT SCOPE_IDENTITY(),'CONSULTA_GENERAL',SYSUTCDATETIME()",P("@e",empleadoGerente));
+     db.Database.ExecuteSqlCommand("INSERT dbo.EmpleadoArea(idEmpleado,Area,Puesto,DesdeUtc) VALUES(@e,'GERENCIA','GERENTE',SYSUTCDATETIME()); INSERT dbo.EmpleadoFuncion(idEmpleadoArea,Funcion,DesdeUtc) SELECT SCOPE_IDENTITY(),'CONSULTA_GENERAL',SYSUTCDATETIME()",P("@e",empleadoGerente));
      AuditarAltaAcceso(empleadoGerente,"AltaCuentaGerencia");AuditarAltaAcceso(empleadoAdministrador,"AltaCuentaAdministrador");
      tx.Commit();
      return Ok(new{mensaje="Se crearon los accesos. Guardá las contraseñas iniciales: no volverán a mostrarse.",gerente=new{usuario=emailGerente,contrasenaInicial=passwordGerente,rol="Empleado · Gerencia"},administrador=new{usuario=emailAdministrador,contrasenaInicial=passwordAdministrador,rol="Administrador del sistema"}});
@@ -197,7 +250,7 @@ namespace CooperativaAPI.Controllers {
     return Rows(@"SELECT e.idEmpleado,CONCAT(p.Nombre,' ',p.Apellido) Nombre,c.NombreCargo Cargo,a.DesdeUtc,
       STUFF((SELECT ', '+f.Funcion FROM dbo.EmpleadoFuncion f WHERE f.idEmpleadoArea=a.idEmpleadoArea AND f.HastaUtc IS NULL AND f.DesdeUtc<=SYSUTCDATETIME() FOR XML PATH(''),TYPE).value('.','nvarchar(max)'),1,2,'') Funciones,
     (SELECT COUNT(*) FROM dbo.TareaLaboral t WHERE t.Area=a.Area AND t.idEmpleadoAsignado=e.idEmpleado AND t.Estado NOT IN ('Cerrada','Rechazada')) Pendientes
-    FROM dbo.EmpleadoArea a JOIN dbo.Empleado e ON e.idEmpleado=a.idEmpleado JOIN dbo.Persona p ON p.idPersona=e.idPersona JOIN dbo.Cargo c ON c.idCargo=e.idCargo
+    FROM dbo.EmpleadoArea a JOIN dbo.Empleado e ON e.idEmpleado=a.idEmpleado JOIN dbo.Persona p ON p.idPersona=e.idPersona LEFT JOIN dbo.Cargo c ON c.idCargo=e.idCargo
     WHERE a.Area=@a AND a.HastaUtc IS NULL AND e.Activo=1",P("@a",area));
   });}
 

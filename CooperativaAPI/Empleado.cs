@@ -29,7 +29,7 @@ namespace CooperativaAPI
         public int idPersona { get; set; }
         public System.DateTime FechaDelInicio { get; set; }
         public Nullable<bool> Activo { get; set; }
-        public int idCargo { get; set; }
+        public Nullable<int> idCargo { get; set; }
     
         public virtual Cargo Cargo { get; set; }
         public virtual Persona Persona { get; set; }

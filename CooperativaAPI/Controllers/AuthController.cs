@@ -24,7 +24,7 @@ namespace CooperativaAPI.Controllers
         public IHttpActionResult Login([FromBody] LoginRequest request)
         {
             if (request == null ||
-                string.IsNullOrEmpty(request.Email) ||
+                string.IsNullOrWhiteSpace(request.Email) ||
                 string.IsNullOrEmpty(request.Password))
             {
                 return BadRequest("Datos inválidos.");
@@ -32,9 +32,15 @@ namespace CooperativaAPI.Controllers
 
             try
             {
+                var identificador = request.Email.Trim();
+                var buscarPorEmail = identificador.Contains("@");
+                var emailNormalizado = identificador.ToLowerInvariant();
                 var candidatos = db.UsuarioSistema.Include(u=>u.Rol).Include(u=>u.Socio2.Persona).Include(u=>u.Empleado.Persona).Include(u=>u.Empleado.Cargo)
-                    .Where(u => u.Socio2.Persona.Email==request.Email || u.Empleado.Persona.Email==request.Email || (u.Rol.NombreRol=="Administrador" && u.Usuario==request.Email));
-                if(!string.IsNullOrWhiteSpace(request.TipoAcceso)) candidatos=candidatos.Where(u=>u.Rol.NombreRol==request.TipoAcceso);
+                    .Where(u => (buscarPorEmail && (u.Socio2.Persona.Email.ToLower()==emailNormalizado || u.Empleado.Persona.Email.ToLower()==emailNormalizado || (u.Rol.NombreRol=="Administrador" && u.Usuario.ToLower()==emailNormalizado)))
+                        || (!buscarPorEmail && (u.Socio2.Persona.Documento==identificador || u.Empleado.Persona.Documento==identificador || (u.Rol.NombreRol=="Administrador" && u.Usuario==identificador))));
+                if (request.TipoAcceso == "Socio") candidatos = candidatos.Where(u => u.Rol.NombreRol == "Socio");
+                else if (request.TipoAcceso == "Empleado") candidatos = candidatos.Where(u => u.Rol.NombreRol == "Empleado" || u.Rol.NombreRol == "Administrador");
+                else if (request.TipoAcceso == "Administrador") candidatos = candidatos.Where(u => u.Rol.NombreRol == "Administrador");
                 var cuentas=candidatos.ToList();
                 if(cuentas.Count>1)return BadRequest("Elegí acceso personal, laboral o administración del sistema.");
                 var usuario=cuentas.SingleOrDefault();
@@ -56,7 +62,7 @@ namespace CooperativaAPI.Controllers
                     db.SaveChanges();
                 }
 
-                if (usuario.Rol.NombreRol != "Socio" && usuario.idEmpleado.HasValue && usuario.Empleado != null && usuario.Empleado.Activo != true)
+                if (usuario.Rol.NombreRol == "Empleado" && usuario.idEmpleado.HasValue && usuario.Empleado != null && usuario.Empleado.Activo != true)
                     return BadRequest("El empleado se encuentra inactivo.");
                 if (usuario.Rol.NombreRol == "Socio" && (usuario.Socio2 == null || usuario.Socio2.Activo != true) && !AltaSocioAcceso.Pendiente(db, usuario))
                     return BadRequest("El socio se encuentra inactivo.");

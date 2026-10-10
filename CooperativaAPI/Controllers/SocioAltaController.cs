@@ -172,7 +172,7 @@ namespace CooperativaAPI.Controllers
                 var account = One("SELECT idSocio FROM dbo.UsuarioSistema WHERE idUsuarioSistema=@u", P("@u", userId)); if (account == null || account["idSocio"].Type == JTokenType.Null) throw new ArgumentException("La cuenta no corresponde a un socio.");
                 int socio = (int)account["idSocio"]; var alta = Alta(socio);
                 if ((string)alta["Version"] != (string)data["Version"]) return Content(HttpStatusCode.Conflict, "El trámite cambió. Actualizá la vista.");
-                bool aprobar = (bool?)data["Aprobar"] ?? false; int? reason = null;
+                bool aprobar = (bool?)data["Aprobar"] ?? false; int? reason = null; string reasonName = null;
                 if (aprobar)
                 {
                     int person = TargetPerson(userId); int count = db.Database.SqlQuery<int>(@"SELECT COUNT(DISTINCT t.Codigo) FROM dbo.TipoDocumentoPersona t JOIN dbo.DocumentoPersona d ON d.idTipoDocumentoPersona=t.idTipoDocumentoPersona WHERE d.idPersona=@p AND t.Codigo IN ('Domicilio','DniFrente','DniDorso') AND d.Estado<>'Rechazado' AND d.idDocumentoPersona=(SELECT MAX(x.idDocumentoPersona) FROM dbo.DocumentoPersona x WHERE x.idPersona=@p AND x.idTipoDocumentoPersona=t.idTipoDocumentoPersona)", P("@p", person)).Single();
@@ -183,13 +183,22 @@ namespace CooperativaAPI.Controllers
                 }
                 else
                 {
-                    string code = (string)data["Motivo"]; var selected = One("SELECT idMotivo FROM dbo.MotivoRechazoAltaSocio WHERE Codigo=@c AND Activo=1", P("@c", code)); if (selected == null) throw new ArgumentException("Seleccioná un motivo de rechazo predefinido."); reason = (int)selected["idMotivo"];
+                    string code = (string)data["Motivo"]; var selected = One("SELECT idMotivo,Nombre FROM dbo.MotivoRechazoAltaSocio WHERE Codigo=@c AND Activo=1", P("@c", code)); if (selected == null) throw new ArgumentException("Seleccioná un motivo de rechazo predefinido."); reason = (int)selected["idMotivo"]; reasonName = (string)selected["Nombre"];
                     db.Database.ExecuteSqlCommand("UPDATE dbo.AltaSocio SET Estado='Rechazada',idMotivoRechazo=@m,FechaDecisionUtc=SYSUTCDATETIME(),idUsuarioRevisor=@u WHERE idSocio=@s", P("@m", reason), P("@u", UsuarioId), P("@s", socio));
                     db.Database.ExecuteSqlCommand("UPDATE dbo.Socio SET Activo=0 WHERE idSocio=@s", P("@s", socio));
                     db.Database.ExecuteSqlCommand(@"UPDATE d SET Estado='Rechazado',MotivoRechazo=(SELECT Nombre FROM dbo.MotivoRechazoAltaSocio WHERE idMotivo=@m),FechaRevisionUtc=SYSUTCDATETIME(),idUsuarioRevisor=@u FROM dbo.DocumentoPersona d WHERE d.idPersona=(SELECT idPersona FROM dbo.Socio WHERE idSocio=@s) AND d.idDocumentoPersona=(SELECT MAX(x.idDocumentoPersona) FROM dbo.DocumentoPersona x WHERE x.idPersona=d.idPersona AND x.idTipoDocumentoPersona=d.idTipoDocumentoPersona)", P("@m", reason), P("@u", UsuarioId), P("@s", socio));
                 }
-                db.Database.ExecuteSqlCommand(@"INSERT dbo.AltaSocioRevision(idSocio,Estado,idMotivo,idUsuarioRevisor)
-                    VALUES(@s,@estado,@motivo,@usuario)", P("@s", socio), P("@estado", aprobar ? "Aprobada" : "Rechazada"), P("@motivo", reason), P("@usuario", UsuarioId));
+                int revisionId = db.Database.SqlQuery<int>(@"INSERT dbo.AltaSocioRevision(idSocio,Estado,idMotivo,idUsuarioRevisor)
+                    OUTPUT INSERTED.idRevision VALUES(@s,@estado,@motivo,@usuario)", P("@s", socio), P("@estado", aprobar ? "Aprobada" : "Rechazada"), P("@motivo", reason), P("@usuario", UsuarioId)).Single();
+                EventoOperativoStore.Registrar(db, Principal, new EventoOperativoNuevo
+                {
+                    Contexto = aprobar ? "ALTA_SOCIO_REVISION" : "ALTA_SOCIO_RECHAZO",
+                    CodigoEvento = aprobar ? "AltaSocioAprobada" : "AltaSocioRechazada",
+                    Entidad = "AltaSocio", idEntidad = socio.ToString(), Area = "ADMINISTRACION", idSocio = socio,
+                    EstadoAnterior = (string)alta["Estado"], EstadoNuevo = aprobar ? "Aprobada" : "Rechazada",
+                    MotivoNombre = reasonName, MotivoRequerido = !aprobar, ClaveIdempotencia = "AltaSocioRevision:" + revisionId,
+                    Datos = new { idUsuarioRevisor = UsuarioId }
+                });
                 tx.Commit(); return Ok(new { Message = aprobar ? "Alta aprobada." : "Documentación rechazada; el motivo aparece en la cuenta del socio." });
             }
             catch (Exception ex) { tx.Rollback(); return Error(ex); }
@@ -240,7 +249,36 @@ namespace CooperativaAPI.Controllers
         [HttpGet, Route("legajo/mis-documentos")]
         public IHttpActionResult MisDocumentos()
         {
-            try { return Ok(new { persona = One("SELECT idPersona FROM dbo.Persona WHERE idPersona=@p", P("@p", PersonForUser())), documentos = Documentos(PersonForUser()) }); }
+            try
+            {
+                int personId = PersonForUser();
+                var persona = One(@"SELECT p.idPersona,p.Nombre,p.Apellido,p.Documento,p.Email,p.Telefono,
+                    p.NombreContactoEmergencia,p.TelefonoContactoEmergencia,
+                    (SELECT TOP 1 s.idSocio FROM dbo.Socio s WHERE s.idPersona=p.idPersona ORDER BY s.idSocio) idSocio
+                    FROM dbo.Persona p WHERE p.idPersona=@p", P("@p", personId));
+                if (persona == null) throw new UnauthorizedAccessException();
+                return Ok(new { persona, documentos = Documentos(personId) });
+            }
+            catch (Exception ex) { return Error(ex); }
+        }
+        [HttpPut, Route("legajo/contacto-emergencia")]
+        public IHttpActionResult ActualizarContactoEmergencia(JObject data)
+        {
+            try
+            {
+                int personId = PersonForUser();
+                string nombre = ((string)data["NombreContactoEmergencia"] ?? "").Trim();
+                string telefono = ((string)data["TelefonoContactoEmergencia"] ?? "").Trim();
+                if (nombre.Length < 2 || nombre.Length > 120)
+                    throw new ArgumentException("Ingresá el nombre de la persona de contacto (2 a 120 caracteres).");
+                if (telefono.Length < 7 || telefono.Length > 25 || !System.Text.RegularExpressions.Regex.IsMatch(telefono, @"^[0-9+() \-]+$"))
+                    throw new ArgumentException("Ingresá un teléfono válido de 7 a 25 caracteres.");
+
+                db.Database.ExecuteSqlCommand(
+                    "UPDATE dbo.Persona SET NombreContactoEmergencia=@n,TelefonoContactoEmergencia=@t WHERE idPersona=@p",
+                    P("@n", nombre), P("@t", telefono), P("@p", personId));
+                return Ok(new { Message = "Contacto de emergencia guardado." });
+            }
             catch (Exception ex) { return Error(ex); }
         }
         [HttpPost, Route("legajo/documentos")]

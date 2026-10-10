@@ -22,7 +22,8 @@ namespace CooperativaAPI.Controllers
 				var query =
 					from e in db.Empleado
 					join p in db.Persona on e.idPersona equals p.idPersona
-					join c in db.Cargo on e.idCargo equals c.idCargo
+					join cargo in db.Cargo on e.idCargo equals (int?)cargo.idCargo into cargos
+                    from c in cargos.DefaultIfEmpty()
 					select new
 					{
 						e.idEmpleado,
@@ -41,7 +42,7 @@ namespace CooperativaAPI.Controllers
 							p.Calle,
 							p.Numero
 						},
-						Cargo = new
+						Cargo = c == null ? null : new
 						{
 							c.idCargo,
 							Nombre = c.NombreCargo
@@ -76,8 +77,9 @@ namespace CooperativaAPI.Controllers
 				{
 					int? idSocio = (int?)data.idSocio;
                     int? idPersona = (int?)data.idPersona;
-					int idCargo = data.idCargo;
-					DateTime fechaInicio = data.FechaDeInicio;
+					int? idCargo = (int?)data.idCargo;
+                    if(idCargo.HasValue) return BadRequest("El alta se crea sin cargo. Asigná área y puesto desde Organización laboral.");
+					DateTime fechaInicio = DateTime.Today;
 
 					var socio = idSocio.HasValue?db.Socio.Find(idSocio.Value):null;
                     var persona=db.Persona.Find(idPersona??socio?.idPersona);
@@ -93,7 +95,7 @@ namespace CooperativaAPI.Controllers
 					var empleado = new Empleado
 					{
 						idPersona = persona.idPersona,
-						idCargo = idCargo,
+						idCargo = null,
 						FechaDelInicio = fechaInicio,
 						Activo = true
 					};
@@ -131,41 +133,10 @@ namespace CooperativaAPI.Controllers
 		[Route("{id:int}")]
 		[JwtAuthorize(Roles = "Administrador")]
 		public IHttpActionResult Actualizar(int id, dynamic data)
-		{
-            using(var trans=db.Database.BeginTransaction()) {
-			try
-			{
-				var empleado = db.Empleado.Find(id);
+        {
+            return BadRequest("El cargo se configura junto con el área y el puesto desde Organización laboral.");
+        }
 
-				if (empleado == null)
-					return NotFound();
-
-				int idCargo = data.idCargo;
-				bool cargoExiste = db.Cargo.Any(c => c.idCargo == idCargo);
-
-				if (!cargoExiste)
-					return BadRequest("El cargo seleccionado no existe.");
-
-				LaboralAccess.Auditar(db,(ClaimsPrincipal)User,null,null,"CambiarCargo",empleado.idCargo.ToString(),idCargo.ToString(),"Cambio de cargo",new{empleado.idEmpleado});
-                empleado.idCargo = idCargo;
-				db.SaveChanges();
-                trans.Commit();
-
-				return Ok(new
-				{
-					mensaje = "Empleado actualizado correctamente.",
-					empleado.idEmpleado,
-					empleado.idCargo,
-					empleado.FechaDelInicio,
-					empleado.Activo
-				});
-			}
-			catch (Exception ex)
-			{
-				return BadRequest(ex.Message);
-			}
-            }
-		}
 		[HttpDelete]
 		[Route("{id:int}")]
 		[JwtAuthorize(Roles = "Administrador")]
@@ -181,6 +152,7 @@ namespace CooperativaAPI.Controllers
 						return NotFound();
 
 					empleado.Activo = false;
+                    empleado.idCargo = null;
 
                     LaboralAccess.Auditar(db,(ClaimsPrincipal)User,null,null,"BajaEmpleado","Activo","Inactivo","Baja del acceso laboral",new{empleado.idEmpleado},id);
                     db.Database.ExecuteSqlCommand("UPDATE dbo.EncargadoArea SET HastaUtc=SYSUTCDATETIME() WHERE idEmpleado=@id AND HastaUtc IS NULL; UPDATE dbo.EmpleadoArea SET HastaUtc=SYSUTCDATETIME() WHERE idEmpleado=@id AND HastaUtc IS NULL",LaboralAccess.P("@id",id));
@@ -214,6 +186,7 @@ namespace CooperativaAPI.Controllers
 					return NotFound();
 
 				empleado.Activo = !empleado.Activo;
+                empleado.idCargo = null;
                 if(empleado.Activo!=true) db.Database.ExecuteSqlCommand("UPDATE dbo.EncargadoArea SET HastaUtc=SYSUTCDATETIME() WHERE idEmpleado=@id AND HastaUtc IS NULL; UPDATE dbo.EmpleadoArea SET HastaUtc=SYSUTCDATETIME() WHERE idEmpleado=@id AND HastaUtc IS NULL",LaboralAccess.P("@id",id));
                 LaboralAccess.Auditar(db,(ClaimsPrincipal)User,null,null,"EstadoEmpleado",null,empleado.Activo==true?"Activo":"Inactivo","Cambio de acceso laboral",new{empleado.idEmpleado});
 				db.SaveChanges();

@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <edmx:Edmx Version="3.0" xmlns:edmx="http://schemas.microsoft.com/ado/2009/11/edmx">
   <!-- EF Runtime content -->
   <edmx:Runtime>
@@ -44,7 +44,7 @@
           <Property Name="idPersona" Type="int" Nullable="false" />
           <Property Name="FechaDelInicio" Type="date" Nullable="false" />
           <Property Name="Activo" Type="bit" />
-          <Property Name="idCargo" Type="int" Nullable="false" />
+          <Property Name="idCargo" Type="int" Nullable="true" />
         </EntityType>
         <EntityType Name="EstadoReclamo">
           <Key>
@@ -314,7 +314,7 @@
           <Property Name="idEmpleado" Type="int" />
         </EntityType>
         <Association Name="FK__Empleado__idCarg__403A8C7D">
-          <End Role="Cargo" Type="Self.Cargo" Multiplicity="1" />
+          <End Role="Cargo" Type="Self.Cargo" Multiplicity="0..1" />
           <End Role="Empleado" Type="Self.Empleado" Multiplicity="*" />
           <ReferentialConstraint>
             <Principal Role="Cargo">
@@ -1030,7 +1030,7 @@
           <Property Name="idPersona" Type="Int32" Nullable="false" />
           <Property Name="FechaDelInicio" Type="DateTime" Nullable="false" Precision="0" />
           <Property Name="Activo" Type="Boolean" />
-          <Property Name="idCargo" Type="Int32" Nullable="false" />
+          <Property Name="idCargo" Type="Int32" Nullable="true" />
           <NavigationProperty Name="Cargo" Relationship="Self.FK__Empleado__idCarg__403A8C7D" FromRole="Empleado" ToRole="Cargo" />
           <NavigationProperty Name="Persona" Relationship="Self.FK__Empleado__idPers__3F466844" FromRole="Empleado" ToRole="Persona" />
           <NavigationProperty Name="UsuarioSistema" Relationship="Self.FK__UsuarioSi__idEmp__5CD6CB2B" FromRole="Empleado" ToRole="UsuarioSistema" />
@@ -1166,7 +1166,7 @@
           <NavigationProperty Name="Socio2" Relationship="CooperativaModel.FK_UsuarioSistema_Socios" FromRole="UsuarioSistema" ToRole="Socio" />
         </EntityType>
         <Association Name="FK__Empleado__idCarg__403A8C7D">
-          <End Role="Cargo" Type="Self.Cargo" Multiplicity="1" />
+          <End Role="Cargo" Type="Self.Cargo" Multiplicity="0..1" />
           <End Role="Empleado" Type="Self.Empleado" Multiplicity="*" />
           <ReferentialConstraint>
             <Principal Role="Cargo">

@@ -129,6 +129,14 @@ namespace CooperativaAPI.Controllers
                         new System.Data.SqlClient.SqlParameter("@socio", socio.idSocio),
                         new System.Data.SqlClient.SqlParameter("@titular", persona.EsTitular.Value));
 
+                    EventoOperativoStore.Registrar(db, null, new EventoOperativoNuevo
+                    {
+                        Contexto = "SOCIO_ALTA", CodigoEvento = "SocioRegistrado", Entidad = "Socio", idEntidad = socio.idSocio.ToString(),
+                        Area = "ADMINISTRACION", idSocio = socio.idSocio, EstadoNuevo = "PendienteDocumentacion", ActorSistema = true,
+                        ClaveIdempotencia = "SocioAlta:" + socio.idSocio,
+                        Datos = new { Origen = "Alta pública" }
+                    });
+
                     trans.Commit();
 
                     return Ok(new
@@ -212,6 +220,11 @@ namespace CooperativaAPI.Controllers
                     return Ok("Socio ya estaba dado de baja.");
 
                 socio.Activo = false;
+                EventoOperativoStore.Registrar(db, (ClaimsPrincipal)User, new EventoOperativoNuevo
+                {
+                    Contexto = "BAJA_SOCIO", CodigoEvento = "SocioDadoDeBaja", Entidad = "Socio", idEntidad = id.ToString(),
+                    Area = "ADMINISTRACION", idSocio = id, EstadoAnterior = "Activo", EstadoNuevo = "Inactivo"
+                });
                 db.SaveChanges();
 
                 return Ok("Socio dado de baja correctamente. No se eliminaron historial ni relaciones.");
@@ -232,7 +245,15 @@ namespace CooperativaAPI.Controllers
                 var socio = db.Socio.Find(id);
                 if (socio == null) return NotFound();
 
-                socio.Activo = !socio.Activo;
+                var estabaActivo = socio.Activo == true;
+                socio.Activo = !estabaActivo;
+                EventoOperativoStore.Registrar(db, (ClaimsPrincipal)User, new EventoOperativoNuevo
+                {
+                    Contexto = socio.Activo == true ? "SOCIO_ESTADO" : "BAJA_SOCIO",
+                    CodigoEvento = socio.Activo == true ? "SocioReactivado" : "SocioDadoDeBaja",
+                    Entidad = "Socio", idEntidad = id.ToString(), Area = "ADMINISTRACION", idSocio = id,
+                    EstadoAnterior = estabaActivo ? "Activo" : "Inactivo", EstadoNuevo = socio.Activo == true ? "Activo" : "Inactivo"
+                });
                 db.SaveChanges();
 
                 string estado = socio.Activo == true ? "activado" : "dado de baja";

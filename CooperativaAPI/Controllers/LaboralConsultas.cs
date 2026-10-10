@@ -37,6 +37,37 @@ namespace CooperativaAPI.Controllers {
    return areas.Select(a=>new{Area=(string)a["Area"],Nombre=(string)a["Nombre"],conteos=Rows(@"SELECT Estado,COUNT(*) Cantidad FROM dbo.TareaLaboral WHERE Area=@a AND (@equipo=1 OR idEmpleadoAsignado=@e) GROUP BY Estado",P("@a",(string)a["Area"]),P("@equipo",gerencia || Jefe((string)a["Area"])),P("@e",Empleado))}).ToList();
   });}
 
+  [HttpGet,Route("indicadores")]
+  public IHttpActionResult Indicadores(){return Read(()=>{
+   Exigir(LaboralAccess.Gerencia(db,Principal));
+   var porArea=Rows(@"SELECT a.Codigo Area,a.Nombre,COUNT(t.idTarea) Total,
+    SUM(CASE WHEN t.Estado IN ('PendienteAsignacion','EnRevision','Observada','Aprobada') THEN 1 ELSE 0 END) PorAtender,
+    SUM(CASE WHEN t.Estado IN ('Asignada','EnCurso') THEN 1 ELSE 0 END) EnCurso,
+    SUM(CASE WHEN t.Estado='Cerrada' THEN 1 ELSE 0 END) Cerradas,
+    SUM(CASE WHEN t.Estado='Rechazada' THEN 1 ELSE 0 END) Rechazadas
+    FROM dbo.AreaLaboral a LEFT JOIN dbo.TareaLaboral t ON t.Area=a.Codigo
+    GROUP BY a.Codigo,a.Nombre ORDER BY a.Nombre");
+   var tendencia=Rows(@"WITH Meses AS (
+      SELECT DATEADD(MONTH,-5,DATEADD(MONTH,DATEDIFF(MONTH,0,GETUTCDATE()),0)) Mes
+      UNION ALL SELECT DATEADD(MONTH,1,Mes) FROM Meses
+       WHERE Mes<DATEADD(MONTH,DATEDIFF(MONTH,0,GETUTCDATE()),0)
+    ), Creadas AS (
+      SELECT DATEADD(MONTH,DATEDIFF(MONTH,0,FechaCreacionUtc),0) Mes,COUNT(*) Cantidad
+      FROM dbo.TareaLaboral
+      WHERE FechaCreacionUtc>=DATEADD(MONTH,-5,DATEADD(MONTH,DATEDIFF(MONTH,0,GETUTCDATE()),0))
+      GROUP BY DATEADD(MONTH,DATEDIFF(MONTH,0,FechaCreacionUtc),0)
+    ), Cerradas AS (
+      SELECT DATEADD(MONTH,DATEDIFF(MONTH,0,FechaCierreUtc),0) Mes,COUNT(*) Cantidad
+      FROM dbo.TareaLaboral
+      WHERE FechaCierreUtc>=DATEADD(MONTH,-5,DATEADD(MONTH,DATEDIFF(MONTH,0,GETUTCDATE()),0))
+      GROUP BY DATEADD(MONTH,DATEDIFF(MONTH,0,FechaCierreUtc),0)
+    )
+    SELECT CONVERT(date,m.Mes) Periodo,ISNULL(c.Cantidad,0) Creadas,ISNULL(x.Cantidad,0) Cerradas
+    FROM Meses m LEFT JOIN Creadas c ON c.Mes=m.Mes LEFT JOIN Cerradas x ON x.Mes=m.Mes
+    ORDER BY m.Mes OPTION(MAXRECURSION 6)");
+   return new{porArea,tendencia};
+  });}
+
   [HttpGet,Route("socios")]
   public IHttpActionResult Socios(string q="",int pagina=1){return Read(()=>{
    Exigir(LaboralAccess.Atencion(db,Principal) || LaboralAccess.Gerencia(db,Principal));if(pagina<1 || (q??"").Length>100)throw new ArgumentException("Filtros inválidos.");

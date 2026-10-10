@@ -207,15 +207,15 @@ namespace CooperativaAPI.Controllers
             var sql = @"WITH A AS (SELECT * FROM dbo.EventoOperativo e WHERE " + denominatorScope + @"),
                 E AS (SELECT * FROM dbo.EventoOperativo e WHERE " + scope + @"),
                 T AS (SELECT Contexto,CodigoEvento,COUNT_BIG(*) Total FROM A GROUP BY Contexto,CodigoEvento)
-                SELECT x.Contexto,x.CodigoEvento,COALESCE(x.MotivoRegistrado,m.Nombre,x.Resultado,x.EstadoNuevo,x.EstadoAnterior,'Sin clasificar') Motivo,COUNT_BIG(*) CantidadEventos,
+                SELECT x.Contexto,COALESCE(x.Area,'GENERAL') Area,x.CodigoEvento,COALESCE(x.MotivoRegistrado,m.Nombre,x.Resultado,x.EstadoNuevo,x.EstadoAnterior,'Sin clasificar') Motivo,COUNT_BIG(*) CantidadEventos,
                   COUNT(DISTINCT CONCAT(Entidad,':',idEntidad)) RegistrosDistintos,
-                  COUNT(DISTINCT COALESCE(CONVERT(nvarchar(36),OperacionId),CONCAT('EV:',idEventoOperativo))) CantidadOperaciones,
+                  COUNT_BIG(DISTINCT COALESCE(CONVERT(nvarchar(36),OperacionId),CONCAT('EV:',idEventoOperativo))) CantidadOperaciones,
                   SUM(CONVERT(bigint,CASE WHEN x.MotivoDesconocido=1 THEN 1 ELSE 0 END)) MotivosDesconocidos,
                   MAX(T.Total) DenominadorEventos,
                   CAST(COUNT_BIG(*)*100.0/NULLIF(MAX(T.Total),0) AS decimal(6,2)) PorcentajeDelEvento
                 FROM E x JOIN T ON T.Contexto=x.Contexto AND T.CodigoEvento=x.CodigoEvento
                 LEFT JOIN dbo.MotivoEventoOperativo m ON m.idMotivoEvento=x.idMotivoEvento
-                GROUP BY x.Contexto,x.CodigoEvento,COALESCE(x.MotivoRegistrado,m.Nombre,x.Resultado,x.EstadoNuevo,x.EstadoAnterior,'Sin clasificar')
+                GROUP BY x.Contexto,COALESCE(x.Area,'GENERAL'),x.CodigoEvento,COALESCE(x.MotivoRegistrado,m.Nombre,x.Resultado,x.EstadoNuevo,x.EstadoAnterior,'Sin clasificar')
                 ORDER BY x.Contexto,x.CodigoEvento,CantidadEventos DESC";
             var data = db.Database.SqlQuery<EventoOperativoEstadistica>(sql, parameters.ToArray()).ToList();
             return Ok(new { datos = data, desdeUtc = f.DesdeUtc, hastaUtc = f.HastaUtc, sinDatos = data.Count == 0, denominador = "Eventos del mismo contexto y tipo dentro del período y filtros seleccionados." });
@@ -327,6 +327,7 @@ namespace CooperativaAPI.Controllers
     public sealed class EventoOperativoEstadistica
     {
         public string Contexto { get; set; }
+        public string Area { get; set; }
         public string CodigoEvento { get; set; }
         public string Motivo { get; set; }
         public long CantidadEventos { get; set; }
