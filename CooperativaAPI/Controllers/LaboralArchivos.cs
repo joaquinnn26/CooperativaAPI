@@ -42,6 +42,15 @@ namespace CooperativaAPI.Controllers {
    if(!personal && (!User.IsInRole("Administrador") && (task==null || !PuedeVer(task))))return StatusCode(HttpStatusCode.Forbidden);
    return Descargar((byte[])file["Contenido"],(string)file["NombreArchivo"],(string)file["TipoArchivo"]);
   }
+  [HttpGet,Route("documentos-legajo/{id:int}")]
+  public IHttpActionResult DescargarDocumentoLegajoSolicitud(int id){
+   var relation=Rows("SELECT TOP 1 idSolicitudServicio FROM dbo.SolicitudDocumentoLegajo WHERE idDocumentoPersona=@id",P("@id",id)).SingleOrDefault();if(relation==null)return NotFound();
+   var tasks=Rows("SELECT * FROM dbo.TareaLaboral WHERE Categoria IN ('Solicitud','Instalacion') AND OrigenId=@id",P("@id",(int)relation["idSolicitudServicio"]));
+   if(!tasks.Any(PuedeVer))return StatusCode(HttpStatusCode.Forbidden);
+   var file=Rows(@"SELECT d.* FROM dbo.DocumentoPersona d JOIN dbo.SolicitudDocumentoLegajo link ON link.idDocumentoPersona=d.idDocumentoPersona
+    WHERE d.idDocumentoPersona=@id AND link.idSolicitudServicio=@s",P("@id",id),P("@s",(int)relation["idSolicitudServicio"])).SingleOrDefault();
+   if(file==null)return NotFound();return Descargar((byte[])file["Contenido"],(string)file["NombreArchivo"],(string)file["TipoArchivo"]);
+  }
   [HttpGet,Route("documentos-solicitud/{id:int}")]
   public IHttpActionResult DescargarDocumentoSolicitud(int id){
    var file=db.DocumentoSolicitud.Find(id);if(file==null)return NotFound();

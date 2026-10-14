@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Data;
 using System.Linq;
 using System.Net;
@@ -21,12 +22,17 @@ namespace CooperativaAPI.Controllers {
     var r=new Reclamo{idSocio=socio,idTipoReclamo=reclamoTipo,Descripcion=descripcion,Fecha=DateTime.Now,idEstadoReclamo=1,Activo=true};db.Reclamo.Add(r);db.SaveChanges();origen=r.idReclamo;
     tarea=CrearTarea(area,"Reclamo",origen,socio,null,"Atender reclamo #"+origen);
    } else if(tipo=="Solicitud"){
-    area="ADMINISTRACION";int servicio=(int?)data["idServicio"]??0;if(!db.Servicio.Any(s=>s.idServicio==servicio))throw new ArgumentException("Servicio inexistente.");
+    int servicio=(int?)data["idServicio"]??0;var servicioDb=db.Servicio.Find(servicio);if(servicioDb==null)throw new ArgumentException("Servicio inexistente.");var areaServicio=LaboralAccess.AreaServicio(db,servicio);if(!new[]{"AGUA","ENERGIA","INTERNET"}.Contains(areaServicio))areaServicio=null;area=areaServicio??"ADMINISTRACION";
+    var disponibles=DocumentosLegajoDisponibles(socio);var seleccion=data["DocumentosLegajo"] as JArray;
+    var documentosCompartidos=seleccion==null?disponibles.Select(d=>(int)d["idDocumentoPersona"]).ToList():seleccion.Values<int>().Distinct().ToList();
+    if(documentosCompartidos.Any(id=>!disponibles.Any(d=>(int)d["idDocumentoPersona"]==id)))throw new ArgumentException("Uno de los documentos seleccionados ya no está disponible. Actualizá la ficha del socio.");
     if(db.SolicitudServicio.Any(s=>s.idSocio==socio && s.idServicio==servicio && s.FechaResolucion==null))throw new ArgumentException("El socio ya tiene una solicitud pendiente para ese servicio.");
-    var estado=db.EstadoSolicitudServicio.FirstOrDefault(e=>e.NombreEstado=="En Revision");if(estado==null)throw new ArgumentException("Falta configurar el estado de revisión de solicitudes.");
-    var solicitud=new SolicitudServicio{idSocio=socio,idServicio=servicio,idEstadoSolicitud=estado.idEstadoSolicitud,Observaciones=descripcion,FechaSolicitud=DateTime.Now};db.SolicitudServicio.Add(solicitud);db.SaveChanges();origen=solicitud.idSolicitudServicio;tarea=CrearTarea(area,"Solicitud",origen,socio,null,"Revisar solicitud #"+origen);
+    var estadoNombre=areaServicio==null?"En Revision":"Pendiente instalacion";var estado=db.EstadoSolicitudServicio.FirstOrDefault(e=>e.NombreEstado==estadoNombre);if(estado==null)throw new ArgumentException("Falta configurar el estado de revisión de solicitudes.");
+    var solicitud=new SolicitudServicio{idSocio=socio,idServicio=servicio,idEstadoSolicitud=estado.idEstadoSolicitud,Observaciones=descripcion,FechaSolicitud=DateTime.Now};db.SolicitudServicio.Add(solicitud);db.SaveChanges();origen=solicitud.idSolicitudServicio;tarea=areaServicio==null?CrearTarea("ADMINISTRACION","Solicitud",origen,socio,null,"Clasificar solicitud #"+origen):CrearTarea(area,"Instalacion",origen,socio,null,"Instalacion de "+servicioDb.Nombre);db.HistorialEstadoSolicitud.Add(new HistorialEstadoSolicitud{idSolicitudServicio=origen,idEstadoSolicitud=estado.idEstadoSolicitud,idEmpleado=Empleado,FechaCambio=DateTime.Now,Observaciones=areaServicio==null?"Pendiente de clasificacion administrativa.":"Derivada automaticamente al area "+area+" para coordinar la instalacion."});
+    foreach(var documento in documentosCompartidos)db.Database.ExecuteSqlCommand("INSERT dbo.SolicitudDocumentoLegajo(idSolicitudServicio,idDocumentoPersona,idUsuarioCompartio) VALUES(@s,@d,@u)",P("@s",origen),P("@d",documento),P("@u",LaboralAccess.Usuario(Principal)));
+    data["DocumentosLegajoCompartidos"]=new JArray(documentosCompartidos);
    } else throw new ArgumentException("Tipo de trámite inválido.");
-   Audit(area,tarea,"Recepcion"+tipo,null,"PendienteAsignacion",canal,new{OrigenId=origen,idSocio=socio,Canal=canal});return new{idTarea=tarea,OrigenId=origen};
+   Audit(area,tarea,"Recepcion"+tipo,null,"PendienteAsignacion",canal,new{OrigenId=origen,idSocio=socio,Canal=canal,DocumentosLegajo=tipo=="Solicitud"?(data["DocumentosLegajoCompartidos"] as JArray):null});return new{idTarea=tarea,OrigenId=origen};
   });}
   [HttpGet,Route("tareas/{id:int}/medidores")]
   public IHttpActionResult MedidoresTarea(int id){return Read(()=>{var t=Task(id);Exigir(PuedeVer(t));return db.Database.SqlQuery<FichaMedidorDto>(OperacionesMedidor.SelectFicha+" WHERE a.idServicioSocio=@c",P("@c",(int?)t["idServicioSocio"])).ToList();});}
@@ -74,6 +80,38 @@ namespace CooperativaAPI.Controllers {
    return Rows(@"SELECT s.idSocio,s.NumeroSocio,s.Activo,CONCAT(p.Nombre,' ',p.Apellido) Nombre,p.Documento,p.Telefono,p.Email
     FROM dbo.Socio s JOIN dbo.Persona p ON p.idPersona=s.idPersona WHERE @q='' OR CHARINDEX(@q,CONCAT(s.NumeroSocio,' ',p.Nombre,' ',p.Apellido,' ',p.Documento))>0 ORDER BY p.Apellido,p.Nombre OFFSET @offset ROWS FETCH NEXT 25 ROWS ONLY",P("@q",q??""),P("@offset",(pagina-1)*25));
   });}
+  [HttpGet,Route("socios/{id:int}/documentos-legajo")]
+  public IHttpActionResult DocumentosLegajoSolicitud(int id){return Read(()=>{
+   Exigir(LaboralAccess.Atencion(db,Principal) || LaboralAccess.Gerencia(db,Principal));
+   return DocumentosLegajoDisponibles(id);
+  });}
+  private List<JObject> DocumentosLegajoDisponibles(int socio){
+   return Rows(@"WITH Ultimos AS(
+    SELECT d.idDocumentoPersona,d.NombreArchivo,t.Codigo,t.Nombre Requisito,d.Estado,d.FechaCargaUtc,
+     ROW_NUMBER() OVER(PARTITION BY t.Codigo ORDER BY d.FechaCargaUtc DESC,d.idDocumentoPersona DESC) rn
+    FROM dbo.Socio s JOIN dbo.DocumentoPersona d ON d.idPersona=s.idPersona
+    JOIN dbo.TipoDocumentoPersona t ON t.idTipoDocumentoPersona=d.idTipoDocumentoPersona
+    WHERE s.idSocio=@s AND t.Codigo IN('DniFrente','DniDorso','Domicilio'))
+    SELECT idDocumentoPersona,NombreArchivo,Codigo,Requisito,Estado,FechaCargaUtc
+    FROM Ultimos WHERE rn=1 AND Estado<>'Rechazado' ORDER BY CASE Codigo WHEN 'DniFrente' THEN 1 WHEN 'DniDorso' THEN 2 ELSE 3 END",P("@s",socio));
+  }
+  [HttpGet,Route("seguimiento/solicitud/{id:int}")]
+  public IHttpActionResult SeguimientoSolicitud(int id){return Read(()=>{
+   var solicitud=Row("SELECT idSolicitudServicio,idSocio FROM dbo.SolicitudServicio WHERE idSolicitudServicio=@id",P("@id",id));
+   bool esSocio=User.IsInRole("Socio") && Principal.FindFirst("idSocio")?.Value==(string)solicitud["idSocio"];
+   Exigir(esSocio || LaboralAccess.Atencion(db,Principal) || LaboralAccess.Gerencia(db,Principal));
+   return Rows(@"SELECT h.FechaCambio FechaUtc,es.NombreEstado Estado,h.Observaciones Detalle,CAST(NULL AS nvarchar(30)) Area,CAST(N'Estado de solicitud' AS nvarchar(40)) Tipo,
+      COALESCE(CONCAT(p.Nombre,' ',p.Apellido),N'Sistema') Responsable
+     FROM dbo.HistorialEstadoSolicitud h JOIN dbo.EstadoSolicitudServicio es ON es.idEstadoSolicitud=h.idEstadoSolicitud
+     LEFT JOIN dbo.Empleado e ON e.idEmpleado=h.idEmpleado LEFT JOIN dbo.Persona p ON p.idPersona=e.idPersona WHERE h.idSolicitudServicio=@id
+     UNION ALL
+     SELECT au.FechaUtc,au.EstadoNuevo,CASE WHEN au.Accion='NoSePudoInstalar' THEN N'No se pudo realizar la visita. Motivo: '+COALESCE(au.Motivo,N'') WHEN au.Accion='Asignar' THEN N'El encargado asigno o reprogramo la visita.' WHEN au.Accion='Iniciar' THEN N'El operario inicio la instalacion.' WHEN au.Accion='EnviarRevision' THEN N'La instalacion fue enviada a revision del encargado.' WHEN au.Accion='Aprobar' THEN N'El encargado aprobo la instalacion.' WHEN au.Accion='Cerrar' THEN N'La instalacion fue confirmada.' ELSE au.Accion END,
+      t.Area,CAST(N'Actividad' AS nvarchar(40)),COALESCE(CONCAT(p2.Nombre,' ',p2.Apellido),N'Equipo del area')
+     FROM dbo.AuditoriaLaboral au JOIN dbo.TareaLaboral t ON t.idTarea=au.idTarea
+     LEFT JOIN dbo.Empleado e2 ON e2.idEmpleado=au.idEmpleado LEFT JOIN dbo.Persona p2 ON p2.idPersona=e2.idPersona
+     WHERE t.Categoria='Instalacion' AND t.OrigenId=@id AND au.Accion IN('DerivarSolicitud','Asignar','Iniciar','NoSePudoInstalar','EnviarRevision','Aprobar','Cerrar')
+     ORDER BY FechaUtc",P("@id",id));
+  });}
   [HttpGet,Route("conexiones")]
   public IHttpActionResult ConexionesLaborales(int? socio=null,string area=null,string q="",int pagina=1){return Read(()=>{
    Exigir(Empleado.HasValue);if(pagina<1 || (q??"").Length>100)throw new ArgumentException("Filtros inválidos.");
@@ -96,9 +134,9 @@ namespace CooperativaAPI.Controllers {
    bool internetFact=Funcion("INTERNET","FACTURACION");
    Exigir(personal || adminFact || internetFact);
    var where=" WHERE f.Activo=1 AND (@s IS NULL OR f.idSocio=@s) AND (@all=1 OR a.Area='INTERNET') AND (@area IS NULL OR a.Area=@area)";
-   var from=" FROM dbo.Factura f JOIN dbo.Servicio se ON se.idServicio=f.idServicio LEFT JOIN dbo.AreaServicio a ON a.idServicio=f.idServicio LEFT JOIN dbo.ConfirmacionFactura c ON c.idFactura=f.idFactura";
+   var from=" FROM dbo.Factura f JOIN dbo.Servicio se ON se.idServicio=f.idServicio LEFT JOIN dbo.AreaServicio a ON a.idServicio=f.idServicio LEFT JOIN dbo.ConfirmacionFactura c ON c.idFactura=f.idFactura LEFT JOIN dbo.LoteFacturacionInternetDetalle fi ON fi.idFactura=f.idFactura LEFT JOIN dbo.LoteFacturacionInternet lfi ON lfi.idLote=fi.idLote";
    Func<System.Data.SqlClient.SqlParameter[]> args=()=>new[]{P("@s",socio),P("@all",personal || adminFact),P("@area",area),P("@offset",(pagina-1)*25)};
-   return new{items=Rows(@"SELECT f.idFactura,f.idSocio,se.Nombre Servicio,f.MontoTotal,f.FechaEmision,f.FechaCaducidad,f.LinkPago,c.Estado EstadoConfirmado,c.FechaActualizacionUtc,c.Fuente,c.Referencia"+from+where+" ORDER BY f.FechaEmision DESC,f.idFactura DESC OFFSET @offset ROWS FETCH NEXT 25 ROWS ONLY",args()),total=db.Database.SqlQuery<int>("SELECT COUNT(*)"+from+where,args()).Single(),integracionPendiente=true};
+   return new{items=Rows(@"SELECT f.idFactura,f.idSocio,se.Nombre Servicio,f.MontoTotal,f.FechaEmision,f.FechaCaducidad,f.LinkPago,c.Estado EstadoConfirmado,c.FechaActualizacionUtc,c.Fuente,c.Referencia,fi.NumeroFactura,lfi.Periodo,fi.ReferenciaFacturaExterna"+from+where+" ORDER BY f.FechaEmision DESC,f.idFactura DESC OFFSET @offset ROWS FETCH NEXT 25 ROWS ONLY",args()),total=db.Database.SqlQuery<int>("SELECT COUNT(*)"+from+where,args()).Single(),integracionPendiente=false};
   });}
 
   [HttpGet,Route("lecturas")]
@@ -129,12 +167,6 @@ namespace CooperativaAPI.Controllers {
    if(siguiente!=null && siguiente.idServicioSocio==actual.idServicioSocio && asignaciones.Any() && (asignaciones[0]["FechaFin"].Type==JTokenType.Null || siguiente.FechaLectura<=(DateTime)asignaciones[0]["FechaFin"]))siguiente.ConsumoCalculado=siguiente.ValorLectura-valor;
    var despues=new{actual.idMedicion,actual.ValorLectura,actual.ConsumoCalculado,Siguiente=siguiente==null?null:new{siguiente.idMedicion,siguiente.ConsumoCalculado}};
    db.Database.ExecuteSqlCommand("INSERT dbo.CorreccionLecturaLaboral(idMedicion,Area,idUsuarioSistema,idMotivo,Anterior,Nuevo) VALUES(@id,@a,@u,@motivo,@antes,@nuevo)",P("@id",id),P("@a",area),P("@u",LaboralAccess.Usuario(Principal)),P("@motivo",(int)motivo["idMotivo"]),P("@antes",JsonConvert.SerializeObject(antes)),P("@nuevo",JsonConvert.SerializeObject(despues)));
-   EventoOperativoStore.Registrar(db,Principal,new EventoOperativoNuevo {
-    Contexto="LECTURA_CORRECCION",CodigoEvento="CorregirLectura",Entidad="Medicion",idEntidad=id.ToString(),Area=area,
-    idSocio=conexion.idSocio,idServicio=conexion.idServicio,idServicioSocio=conexion.idServicioSocio,idMedidor=actual.idMedidor,
-    EstadoAnterior="Registrada",EstadoNuevo="Corregida",MotivoNombre=(string)motivo["Nombre"],MotivoRequerido=true,
-    Datos=new{antes,despues}
-   });
    Audit(area,null,"CorregirLectura",null,null,(string)motivo["Nombre"],new{antes,despues});return despues;
   });}
   [HttpGet,Route("lecturas/{id:int}/historial")]

@@ -213,10 +213,17 @@ namespace CooperativaAPI.Controllers
             // Incrementa la versión también cuando solo cambia la asignación.
             db.Database.ExecuteSqlCommand("UPDATE dbo.FichaMedidor SET EstadoFisico=EstadoFisico WHERE idMedidor=@id",P("@id",medidorId));
             var nuevo=Ficha(db,medidorId);
-            db.Database.ExecuteSqlCommand(@"INSERT dbo.EventoMedidor(idMedidor,FechaUtc,Accion,idUsuarioSistema,idMotivo,Motivo,Detalle,idAsignacion,ReferenciaTrabajo,Anterior,Nuevo,OperacionId)
+            var idEventoMedidor=db.Database.SqlQuery<long>(@"INSERT dbo.EventoMedidor(idMedidor,FechaUtc,Accion,idUsuarioSistema,idMotivo,Motivo,Detalle,idAsignacion,ReferenciaTrabajo,Anterior,Nuevo,OperacionId)
+                OUTPUT INSERTED.idEvento
                 VALUES(@id,@fecha,@accion,@usuario,@motivoId,@motivo,@detalle,@asignacion,@trabajo,@anterior,@nuevo,@operacion)",
                 P("@id",medidorId),P("@fecha",fecha),P("@accion",accion),P("@usuario",Usuario(user)),P("@motivoId",(object)motivo?.idMotivo),P("@motivo",motivo?.Nombre),
-                P("@detalle",Texto(op.Detalle)),P("@asignacion",asignacion),P("@trabajo",Texto(op.ReferenciaTrabajo)),P("@anterior",antes==null?null:JsonConvert.SerializeObject(antes)),P("@nuevo",JsonConvert.SerializeObject(nuevo)),P("@operacion",eventOperationId));
+                P("@detalle",Texto(op.Detalle)),P("@asignacion",asignacion),P("@trabajo",Texto(op.ReferenciaTrabajo)),P("@anterior",antes==null?null:JsonConvert.SerializeObject(antes)),P("@nuevo",JsonConvert.SerializeObject(nuevo)),P("@operacion",eventOperationId)).Single();
+            if(accion=="Falla") db.Database.ExecuteSqlCommand(@"IF EXISTS(SELECT 1 FROM dbo.IncidenciaMedidor WHERE idMedidor=@id AND idEventoResolucion IS NULL)
+                    UPDATE dbo.IncidenciaMedidor SET idEventoUltimaDeteccion=@evento,FechaUltimaDeteccionUtc=@fecha WHERE idMedidor=@id AND idEventoResolucion IS NULL
+                ELSE INSERT dbo.IncidenciaMedidor(idMedidor,idEventoDeteccion,idEventoUltimaDeteccion,FechaAperturaUtc,FechaUltimaDeteccionUtc,idMotivo,idUsuarioResponsable) VALUES(@id,@evento,@evento,@fecha,@fecha,@motivo,@usuario)",
+                P("@id",medidorId),P("@evento",idEventoMedidor),P("@fecha",fecha),P("@motivo",motivo?.idMotivo),P("@usuario",Usuario(user)));
+            var tipoResolucion=accion=="Reparacion"?"Reparacion":(accion=="Retirar" && motivoAccion=="Reemplazar"?"Reemplazo":null);
+            if(tipoResolucion!=null) db.Database.ExecuteSqlCommand(@"UPDATE dbo.IncidenciaMedidor SET idEventoResolucion=@evento,FechaResolucionUtc=@fecha,TipoResolucion=@tipo,idUsuarioResolucion=@usuario WHERE idMedidor=@id AND idEventoResolucion IS NULL",P("@evento",idEventoMedidor),P("@fecha",fecha),P("@tipo",tipoResolucion),P("@usuario",Usuario(user)),P("@id",medidorId));
             var conexionEvento=antes?.idServicioSocio??nuevo.idServicioSocio;
             int? servicioEvento=conexionEvento.HasValue?db.ServicioSocio.Where(s=>s.idServicioSocio==conexionEvento.Value).Select(s=>(int?)s.idServicio).SingleOrDefault():null;
             var areaEvento=Normalizar(antes?.Tipo??nuevo.Tipo).Contains("agua")?"AGUA":"ENERGIA";

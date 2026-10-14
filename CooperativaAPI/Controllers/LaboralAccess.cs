@@ -42,9 +42,9 @@ namespace CooperativaAPI.Controllers {
      WHERE ea.idEmpleado=@id AND ea.Area=@area AND ea.HastaUtc IS NULL AND f.HastaUtc IS NULL AND f.DesdeUtc<=SYSUTCDATETIME()",P("@id",empleado),P("@area",a.Area)).ToList();}
    return areas;
   }
-  public static void Auditar(CooperativaEntities db,ClaimsPrincipal user,string area,int? tarea,string accion,string anterior,string nuevo,string motivo,object datos=null,int? empleadoObjetivo=null) {
-   var auditId=db.Database.SqlQuery<long>(@"INSERT dbo.AuditoriaLaboral(idTarea,Area,idUsuarioSistema,idEmpleado,Accion,EstadoAnterior,EstadoNuevo,Motivo,Datos)
-    OUTPUT INSERTED.idAuditoria VALUES(@t,@a,@u,@e,@accion,@antes,@despues,@motivo,@datos)",P("@t",tarea),P("@a",area),P("@u",Usuario(user)),P("@e",Empleado(db,user)),P("@accion",accion),P("@antes",anterior),P("@despues",nuevo),P("@motivo",motivo),P("@datos",datos==null?null:JsonConvert.SerializeObject(datos))).Single();
+  public static void Auditar(CooperativaEntities db,ClaimsPrincipal user,string area,int? tarea,string accion,string anterior,string nuevo,string motivo,object datos=null,int? empleadoObjetivo=null,int? idMotivoLaboral=null) {
+   var auditId=db.Database.SqlQuery<long>(@"INSERT dbo.AuditoriaLaboral(idTarea,Area,idUsuarioSistema,idEmpleado,Accion,EstadoAnterior,EstadoNuevo,Motivo,Datos,idMotivoLaboral)
+    OUTPUT INSERTED.idAuditoria VALUES(@t,@a,@u,@e,@accion,@antes,@despues,@motivo,@datos,@idMotivo)",P("@t",tarea),P("@a",area),P("@u",Usuario(user)),P("@e",Empleado(db,user)),P("@accion",accion),P("@antes",anterior),P("@despues",nuevo),P("@motivo",motivo),P("@datos",datos==null?null:JsonConvert.SerializeObject(datos)),P("@idMotivo",idMotivoLaboral)).Single();
    var task=tarea.HasValue?db.Database.SqlQuery<TareaEvento>("SELECT TOP 1 idSocio,idServicioSocio,idEmpleadoAsignado,OrigenId,Categoria FROM dbo.TareaLaboral WHERE idTarea=@id",P("@id",tarea.Value)).SingleOrDefault():null;
    var contexto=accion=="BajaEmpleado"?"EMPLEADO_BAJA":"LABORAL_"+((area??task?.Categoria??"GENERAL").ToUpperInvariant())+"_"+(accion??"EVENTO").ToUpperInvariant();
    bool motivoObligatorio=new[]{"Rechazar","Devolver","CorregirLectura","RechazarInstalacion"}.Contains(accion);

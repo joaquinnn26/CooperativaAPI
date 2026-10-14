@@ -136,20 +136,53 @@ namespace CooperativaAPI.Controllers
                 if (solicitudActiva)
                     return BadRequest("Ya existe una solicitud activa para este servicio.");
 
+                using (var tx = db.Database.BeginTransaction())
+                {
                 solicitud.FechaSolicitud = DateTime.Now;
 
-                var estadoEnRevision = ObtenerOCrearEstadoSolicitud("En Revision");
+                var areaServicio = LaboralAccess.AreaServicio(db, solicitud.idServicio);
+                var derivaDirecto = new[] { "AGUA", "ENERGIA", "INTERNET" }.Contains(areaServicio);
+                var estadoEnRevision = ObtenerOCrearEstadoSolicitud(derivaDirecto ? "Pendiente instalacion" : "En Revision");
                 solicitud.idEstadoSolicitud = estadoEnRevision.idEstadoSolicitud;
                 solicitud.MotivoRechazo = null;
 
                 db.SolicitudServicio.Add(solicitud);
                 db.SaveChanges();
+                db.HistorialEstadoSolicitud.Add(new HistorialEstadoSolicitud {
+                    idSolicitudServicio = solicitud.idSolicitudServicio,
+                    idEstadoSolicitud = estadoEnRevision.idEstadoSolicitud,
+                    FechaCambio = DateTime.Now,
+                    Observaciones = derivaDirecto
+                        ? "Solicitud derivada automaticamente al area " + areaServicio + " para coordinar la instalacion."
+                        : "Solicitud recibida; pendiente de clasificacion administrativa."
+                });
+                db.SaveChanges();
+                if (derivaDirecto)
+                {
+                    var servicioNombre = db.Servicio.Find(solicitud.idServicio).Nombre;
+                    var tarea = db.Database.SqlQuery<int>(@"INSERT dbo.TareaLaboral(Area,Categoria,OrigenId,idSocio,Titulo,Estado)
+                        OUTPUT INSERTED.idTarea VALUES(@area,'Instalacion',@origen,@socio,@titulo,'PendienteAsignacion')",
+                        new System.Data.SqlClient.SqlParameter("@area", areaServicio),
+                        new System.Data.SqlClient.SqlParameter("@origen", solicitud.idSolicitudServicio),
+                        new System.Data.SqlClient.SqlParameter("@socio", solicitud.idSocio),
+                        new System.Data.SqlClient.SqlParameter("@titulo", "Instalacion de " + servicioNombre)).Single();
+                    LaboralAccess.Auditar(db, (ClaimsPrincipal)User, areaServicio, tarea, "DerivarSolicitud", null, "PendienteAsignacion", "Solicitud derivada automaticamente al area responsable.");
+                }
+                EventoOperativoStore.Registrar(db, (ClaimsPrincipal)User, new EventoOperativoNuevo {
+                    Contexto = "SOLICITUD_SERVICIO", CodigoEvento = "SolicitudCreada", Entidad = "SolicitudServicio",
+                    idEntidad = solicitud.idSolicitudServicio.ToString(), Area = areaServicio,
+                    idSocio = solicitud.idSocio, idServicio = solicitud.idServicio,
+                    EstadoNuevo = estadoEnRevision.NombreEstado, Detalle = "Solicitud recibida por el sistema.",
+                    ClaveIdempotencia = "SolicitudServicioCreada:" + solicitud.idSolicitudServicio
+                });
+                tx.Commit();
 
                 return Ok(new
                 {
                     mensaje = "Solicitud creada correctamente.",
                     solicitud.idSolicitudServicio
                 });
+                }
             }
             catch (Exception ex)
             {

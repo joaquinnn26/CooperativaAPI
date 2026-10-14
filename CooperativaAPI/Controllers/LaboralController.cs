@@ -44,7 +44,7 @@ namespace CooperativaAPI.Controllers {
    }
   }
   private void Version(JObject row,JObject data){if((string)row["Version"]!=(string)data?["Version"])throw new DBConcurrencyException("El registro cambió. Actualizá antes de guardar.");}
-  private void Audit(string area,int? task,string action,string before,string after,string reason,object data=null){LaboralAccess.Auditar(db,Principal,area,task,action,before,after,reason,data);}
+  private void Audit(string area,int? task,string action,string before,string after,string reason,object data=null,int? idMotivoLaboral=null){LaboralAccess.Auditar(db,Principal,area,task,action,before,after,reason,data,null,idMotivoLaboral);}
 
   [HttpGet,Route("perfil")]
   public IHttpActionResult Perfil(){return Read(()=>{Exigir(!User.IsInRole("Socio"));return new {idEmpleado=Empleado,areas=LaboralAccess.Perfil(db,Principal),cargo=db.Empleado.Where(e=>e.idEmpleado==Empleado).Select(e=>e.Cargo.NombreCargo).FirstOrDefault(),configurar=Admin};});}

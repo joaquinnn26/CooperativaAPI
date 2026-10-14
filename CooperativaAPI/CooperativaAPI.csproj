@@ -533,4 +533,6 @@
   <ItemGroup><Content Include="Data\20261002_NormalizarAsignacionMedidor.sql" /></ItemGroup>
   <ItemGroup><Content Include="Data\20261002_NormalizarMedidor.sql" /></ItemGroup>
   <ItemGroup><Content Include="Data\20261002_NormalizarDocumentos.sql" /></ItemGroup>
+  <ItemGroup><Compile Include="Controllers\InternetFacturacionController.cs" /></ItemGroup>
+  <ItemGroup><Content Include="Data\20261012_FacturacionInternetArchivos.sql" /><Content Include="Data\20261013_EstadisticasMotivos.sql" /><Content Include="Data\20261014_IncidenciasMedidor.sql" /><Content Include="Data\20261015_DocumentosLegajoSolicitud.sql" /></ItemGroup>
 </Project>

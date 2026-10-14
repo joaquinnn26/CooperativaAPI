@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Data.SqlClient;
 using System.Data.Entity;
@@ -199,6 +199,8 @@ namespace CooperativaAPI.Controllers
         [HttpGet, Route("estadisticas")]
         public IHttpActionResult Estadisticas([FromUri] EventoOperativoFiltro f)
         {
+            if (!PuedeAdministrar()) return StatusCode(HttpStatusCode.Forbidden);
+            if (!PuedeAdministrar()) return StatusCode(HttpStatusCode.Forbidden);
             if (f == null) f = new EventoOperativoFiltro();
             var validation = ValidarFiltro(f); if (validation != null) return BadRequest(validation);
             if (!PuedeConsultar(f.Area)) return StatusCode(HttpStatusCode.Forbidden);
@@ -219,6 +221,98 @@ namespace CooperativaAPI.Controllers
                 ORDER BY x.Contexto,x.CodigoEvento,CantidadEventos DESC";
             var data = db.Database.SqlQuery<EventoOperativoEstadistica>(sql, parameters.ToArray()).ToList();
             return Ok(new { datos = data, desdeUtc = f.DesdeUtc, hastaUtc = f.HastaUtc, sinDatos = data.Count == 0, denominador = "Eventos del mismo contexto y tipo dentro del período y filtros seleccionados." });
+        }
+
+        [HttpGet, Route("dashboard")]
+        public IHttpActionResult Dashboard(string area = null)
+        {
+            bool gerente = PuedeAdministrar();
+            var profile = LaboralAccess.Perfil(db, Principal);
+            var areasPermitidas = profile.Where(a => a.Encargado || a.Funciones.Contains("ESTADISTICAS")).Select(a => a.Area).Distinct().ToList();
+            if (!gerente && areasPermitidas.Count == 0) return StatusCode(HttpStatusCode.Forbidden);
+            if (!gerente && !string.IsNullOrWhiteSpace(area)) return StatusCode(HttpStatusCode.Forbidden);
+            if (!string.IsNullOrWhiteSpace(area) && !db.Database.SqlQuery<int>("SELECT 1 FROM dbo.AreaLaboral WHERE Codigo=@a", P("@a", area)).Any()) return BadRequest("El área indicada no existe.");
+
+            var tz = TimeZoneInfo.FindSystemTimeZoneById("Argentina Standard Time");
+            var localNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
+            var today = localNow.Date; var tomorrow = today.AddDays(1);
+            var month = new DateTime(localNow.Year, localNow.Month, 1); var trendStartLocal = month.AddMonths(-11);
+            Func<DateTime, DateTime> utc = d => TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(d, DateTimeKind.Unspecified), tz);
+            var filter = new EventoOperativoFiltro { Area = gerente ? (string.IsNullOrWhiteSpace(area) ? null : area) : null };
+            Func<string, bool> incluyeArea = target => gerente ? (filter.Area == null || filter.Area == target) : areasPermitidas.Contains(target);
+            var scope = Scope(filter, out var parameters);
+            if (!gerente) { parameters.Add(P("@dashboardAreas", string.Join(",", areasPermitidas))); scope += " AND e.Area IN (SELECT value FROM STRING_SPLIT(@dashboardAreas,','))"; }
+            Func<DateTime, DateTime, SqlParameter[]> range = (from, to) => parameters.Select(x => new SqlParameter(x.ParameterName, x.Value)).Concat(new[] { P("@from", from), P("@to", to) }).ToArray();
+            Func<IEnumerable<SqlParameter>, SqlParameter[]> cloneParams = source => source.Select(x => new SqlParameter(x.ParameterName, x.Value)).ToArray();
+
+            var daily = db.Database.SqlQuery<DashboardEvent>(@"SELECT e.Area,e.Contexto,e.CodigoEvento,COUNT_BIG(*) Cantidad FROM dbo.EventoOperativo e WHERE " + scope + " AND e.FechaEventoUtc>=@from AND e.FechaEventoUtc<@to GROUP BY e.Area,e.Contexto,e.CodigoEvento", range(utc(today), utc(tomorrow))).ToList();
+            var motiveScope = scope.Replace("e.", "z.");
+            var motiveSql = @"SELECT e.Area,e.Contexto,e.CodigoEvento,e.idMotivoEvento,CAST(NULL AS int) idMotivoDocumento,CASE WHEN e.MotivoDesconocido=1 THEN N'Motivo histórico sin equivalencia confirmada' ELSE COALESCE(e.MotivoRegistrado,m.Nombre,N'Sin motivo registrado') END Motivo,e.MotivoDesconocido,COUNT_BIG(*) Cantidad,
+                (SELECT COUNT_BIG(*) FROM dbo.EventoOperativo z WHERE z.Area=e.Area AND z.Contexto=e.Contexto AND z.CodigoEvento=e.CodigoEvento AND z.FechaEventoUtc>=@from AND z.FechaEventoUtc<@to AND " + motiveScope + @") Denominador
+                FROM dbo.EventoOperativo e LEFT JOIN dbo.MotivoEventoOperativo m ON m.idMotivoEvento=e.idMotivoEvento WHERE " + scope + " AND e.Entidad<>'TareaLaboral' AND e.FechaEventoUtc>=@from AND e.FechaEventoUtc<@to AND (e.idMotivoEvento IS NOT NULL OR e.MotivoRegistrado IS NOT NULL OR e.MotivoDesconocido=1) GROUP BY e.Area,e.Contexto,e.CodigoEvento,e.idMotivoEvento,e.MotivoDesconocido,e.MotivoRegistrado,m.Nombre";
+            var motives = db.Database.SqlQuery<DashboardMotive>(motiveSql, range(utc(month), utc(tomorrow))).ToList();
+            var laborMotiveAreaScope = gerente ? "(@area IS NULL OR a.Area=@area)" : "a.Area IN (SELECT value FROM STRING_SPLIT(@team,','))";
+            var laborMotiveParameters = new[] { P("@area", gerente ? (object)filter.Area : null), P("@team", string.Join(",", areasPermitidas)), P("@from", utc(month)), P("@to", utc(tomorrow)) };
+            motives.AddRange(db.Database.SqlQuery<DashboardMotive>(@"SELECT a.Area,CONCAT('LABORAL_',a.Area,'_',UPPER(a.Accion)) Contexto,a.Accion CodigoEvento,CAST(NULL AS int) idMotivoEvento,CAST(NULL AS int) idMotivoDocumento,m.idMotivo idMotivoLaboral,m.Nombre Motivo,CONVERT(bit,0) MotivoDesconocido,COUNT_BIG(*) Cantidad,
+                (SELECT COUNT_BIG(*) FROM dbo.AuditoriaLaboral z WHERE z.Area=a.Area AND z.Accion=a.Accion AND z.FechaUtc>=@from AND z.FechaUtc<@to) Denominador
+                FROM dbo.AuditoriaLaboral a JOIN dbo.MotivoLaboral m ON m.idMotivo=a.idMotivoLaboral AND m.Area=a.Area AND m.Accion=a.Accion
+                WHERE a.FechaUtc>=@from AND a.FechaUtc<@to AND " + laborMotiveAreaScope + " GROUP BY a.Area,a.Accion,m.idMotivo,m.Nombre", laborMotiveParameters).ToList());
+            if (incluyeArea("ADMINISTRACION"))
+                motives.AddRange(db.Database.SqlQuery<DashboardMotive>(@"SELECT 'ADMINISTRACION' Area,'DOCUMENTO_PERSONA_RECHAZO' Contexto,'Rechazado' CodigoEvento,CAST(NULL AS int) idMotivoEvento,h.idMotivoDocumento,CAST(NULL AS int) idMotivoLaboral,m.Nombre Motivo,CONVERT(bit,0) MotivoDesconocido,COUNT_BIG(*) Cantidad,(SELECT COUNT_BIG(*) FROM dbo.HistorialDocumentoPersona d WHERE d.FechaUtc>=@from AND d.FechaUtc<@to AND d.EstadoNuevo='Rechazado' AND d.idMotivoDocumento IS NOT NULL) Denominador FROM dbo.HistorialDocumentoPersona h JOIN dbo.MotivoDocumentoPersona m ON m.idMotivo=h.idMotivoDocumento WHERE h.FechaUtc>=@from AND h.FechaUtc<@to AND h.EstadoNuevo='Rechazado' AND h.idMotivoDocumento IS NOT NULL GROUP BY h.idMotivoDocumento,m.Nombre", range(utc(month), utc(tomorrow))));
+            if (incluyeArea("INTERNET"))
+                motives.AddRange(db.Database.SqlQuery<DashboardMotive>(@"SELECT 'INTERNET' Area,'INTERNET_FACTURACION' Contexto,'RECHAZADA' CodigoEvento,CAST(NULL AS int) idMotivoEvento,CAST(NULL AS int) idMotivoDocumento,CAST(NULL AS int) idMotivoLaboral,d.MotivoRechazo Motivo,CONVERT(bit,0) MotivoDesconocido,COUNT_BIG(*) Cantidad,(SELECT COUNT_BIG(*) FROM dbo.LoteFacturacionInternet l2 JOIN dbo.LoteFacturacionInternetDetalle d2 ON d2.idLote=l2.idLote WHERE l2.FechaCreacionUtc>=@from AND l2.FechaCreacionUtc<@to AND l2.Estado<>'Anulado' AND d2.Resultado='RECHAZADA') Denominador FROM dbo.LoteFacturacionInternet l JOIN dbo.LoteFacturacionInternetDetalle d ON d.idLote=l.idLote WHERE l.FechaCreacionUtc>=@from AND l.FechaCreacionUtc<@to AND l.Estado<>'Anulado' AND d.Resultado='RECHAZADA' AND d.MotivoRechazo IS NOT NULL GROUP BY d.MotivoRechazo", range(utc(month), utc(tomorrow))));
+            var trends = db.Database.SqlQuery<DashboardTrend>(@"SELECT DATEADD(MONTH,DATEDIFF(MONTH,0,e.FechaEventoUtc),0) Periodo,e.Area,e.Contexto,COUNT_BIG(*) Cantidad FROM dbo.EventoOperativo e WHERE " + scope + " AND e.FechaEventoUtc>=@from AND e.FechaEventoUtc<@to GROUP BY DATEADD(MONTH,DATEDIFF(MONTH,0,e.FechaEventoUtc),0),e.Area,e.Contexto", range(utc(trendStartLocal), utc(tomorrow))).ToList();
+            var coverage = db.Database.SqlQuery<DateTime?>("SELECT MIN(e.FechaEventoUtc) FROM dbo.EventoOperativo e WHERE " + scope, cloneParams(parameters)).SingleOrDefault();
+            var compareStart = month.AddMonths(-1); var compareDay = Math.Min(localNow.Day, DateTime.DaysInMonth(compareStart.Year, compareStart.Month)); var compareEnd = compareStart.AddDays(compareDay);
+            var monthComparison = db.Database.SqlQuery<DashboardPeriodCount>(@"SELECT 'Mes actual' Periodo,COUNT_BIG(*) Cantidad FROM dbo.EventoOperativo e WHERE " + scope + " AND e.FechaEventoUtc>=@from AND e.FechaEventoUtc<@to UNION ALL SELECT 'Mismo tramo mes anterior',COUNT_BIG(*) FROM dbo.EventoOperativo e WHERE " + scope + " AND e.FechaEventoUtc>=@compareFrom AND e.FechaEventoUtc<@compareTo", cloneParams(parameters).Concat(new[] { P("@from",utc(month)),P("@to",utc(tomorrow)),P("@compareFrom",utc(compareStart)),P("@compareTo",utc(compareEnd)) }).ToArray()).ToList();
+
+            var weekly = db.Database.SqlQuery<DashboardFlowWeek>(@"WITH X AS(SELECT e.*,ROW_NUMBER() OVER(PARTITION BY e.Entidad,e.idEntidad ORDER BY e.FechaEventoUtc,e.idEventoOperativo) rn FROM dbo.EventoOperativo e WHERE " + scope + @" AND e.FechaEventoUtc>=@from AND e.FechaEventoUtc<@to AND (e.Entidad='TareaLaboral' OR e.Entidad='SolicitudServicio')), F AS(
+                SELECT DATEADD(WEEK,DATEDIFF(WEEK,0,FechaEventoUtc),0) Semana,Area,'Tareas' Proceso,'Recibidos' Tipo FROM X WHERE Entidad='TareaLaboral' AND CodigoEvento='CrearTarea'
+                UNION ALL SELECT DATEADD(WEEK,DATEDIFF(WEEK,0,FechaEventoUtc),0),Area,'Solicitudes','Recibidos' FROM X WHERE Entidad='SolicitudServicio' AND CodigoEvento='SolicitudCreada'
+                UNION ALL SELECT DATEADD(WEEK,DATEDIFF(WEEK,0,FechaEventoUtc),0),Area,CASE WHEN Entidad='TareaLaboral' THEN 'Tareas' ELSE 'Solicitudes' END,'Resueltos' FROM X WHERE EstadoNuevo IN ('Cerrada','Rechazada','Resuelta','Finalizada','Cancelada') AND (EstadoAnterior IS NULL OR EstadoAnterior NOT IN ('Cerrada','Rechazada','Resuelta','Finalizada','Cancelada')))
+                SELECT Semana,Area,Proceso,Tipo,COUNT_BIG(*) Cantidad FROM F GROUP BY Semana,Area,Proceso,Tipo ORDER BY Semana,Area,Proceso", range(utc(trendStartLocal),utc(tomorrow))).ToList();
+            var ageing = db.Database.SqlQuery<DashboardAgeing>(@"SELECT t.Area,t.Categoria Proceso,CASE WHEN DATEDIFF(DAY,t.FechaCreacionUtc,SYSUTCDATETIME())<2 THEN '0–1 días' WHEN DATEDIFF(DAY,t.FechaCreacionUtc,SYSUTCDATETIME())<8 THEN '2–7 días' WHEN DATEDIFF(DAY,t.FechaCreacionUtc,SYSUTCDATETIME())<31 THEN '8–30 días' ELSE 'Más de 30 días' END Rango,COUNT_BIG(*) Cantidad FROM dbo.TareaLaboral t WHERE t.Estado NOT IN ('Cerrada','Rechazada','Cancelada','Anulada') AND (@area IS NULL OR t.Area=@area) AND (@manager=1 OR (t.Area IN (SELECT value FROM STRING_SPLIT(@team,',')) AND (t.idEmpleadoAsignado=@employee OR @isLeader=1))) GROUP BY t.Area,t.Categoria,CASE WHEN DATEDIFF(DAY,t.FechaCreacionUtc,SYSUTCDATETIME())<2 THEN '0–1 días' WHEN DATEDIFF(DAY,t.FechaCreacionUtc,SYSUTCDATETIME())<8 THEN '2–7 días' WHEN DATEDIFF(DAY,t.FechaCreacionUtc,SYSUTCDATETIME())<31 THEN '8–30 días' ELSE 'Más de 30 días' END", P("@area",gerente?(object)filter.Area:null),P("@manager",gerente),P("@team",string.Join(",",areasPermitidas)),P("@employee",LaboralAccess.Empleado(db,Principal)),P("@isLeader",profile.Any(x=>x.Encargado))).ToList();
+            var repeatMeters = new List<DashboardRepeat>();
+            var incidentMotives = new List<DashboardIncidentMotive>();
+            var motiveResolution = new List<DashboardMotiveResolution>();
+            bool incidenceSchema = db.Database.SqlQuery<int>("SELECT CASE WHEN OBJECT_ID('dbo.IncidenciaMedidor','U') IS NULL THEN 0 ELSE 1 END").Single() == 1;
+            if (incidenceSchema && (incluyeArea("AGUA") || incluyeArea("ENERGIA")))
+            {
+                var incidentAreaScope = gerente ? "(@area IS NULL OR x.Area=@area)" : "x.Area IN (SELECT value FROM STRING_SPLIT(@team,','))";
+                var incidentParameters = new[] { P("@area", gerente ? (object)filter.Area : null), P("@team", string.Join(",", areasPermitidas)), P("@from", utc(localNow.AddMonths(-12).Date)), P("@to", utc(tomorrow)) };
+                const string areaExpression = "CASE WHEN tm.Nombre='Agua' THEN 'AGUA' ELSE 'ENERGIA' END";
+                repeatMeters = db.Database.SqlQuery<DashboardRepeat>(@"SELECT " + areaExpression + @" Area,COUNT_BIG(*) Cantidad FROM dbo.IncidenciaMedidor i JOIN dbo.Medidor md ON md.idMedidor=i.idMedidor JOIN dbo.TipoMedidor tm ON tm.idTipoMedidor=md.idTipoMedidor CROSS APPLY(SELECT " + areaExpression + @" Area) x WHERE i.FechaAperturaUtc>=@from AND i.FechaAperturaUtc<@to AND EXISTS(SELECT 1 FROM dbo.IncidenciaMedidor p WHERE p.idMedidor=i.idMedidor AND p.idIncidencia<>i.idIncidencia AND p.FechaAperturaUtc<i.FechaAperturaUtc AND p.FechaAperturaUtc>=DATEADD(MONTH,-12,i.FechaAperturaUtc)) AND " + incidentAreaScope + " GROUP BY " + areaExpression, cloneParams(incidentParameters)).ToList();
+                incidentMotives = db.Database.SqlQuery<DashboardIncidentMotive>(@"SELECT x.Area,COALESCE(m.Nombre,N'Sin motivo asociado') Motivo,COUNT_BIG(*) Cantidad FROM dbo.IncidenciaMedidor i JOIN dbo.Medidor md ON md.idMedidor=i.idMedidor JOIN dbo.TipoMedidor tm ON tm.idTipoMedidor=md.idTipoMedidor CROSS APPLY(SELECT " + areaExpression + @" Area) x LEFT JOIN dbo.MotivoMedidor m ON m.idMotivo=i.idMotivo WHERE i.idEventoResolucion IS NULL AND " + incidentAreaScope + " GROUP BY x.Area,m.Nombre ORDER BY Cantidad DESC", cloneParams(incidentParameters)).ToList();
+                motiveResolution = db.Database.SqlQuery<DashboardMotiveResolution>(@"SELECT x.Area,COALESCE(m.Nombre,N'Sin motivo asociado') Motivo,COUNT_BIG(*) Casos,AVG(CONVERT(float,DATEDIFF(MINUTE,i.FechaAperturaUtc,i.FechaResolucionUtc)))/60.0 HorasPromedio,MIN(DATEDIFF(MINUTE,i.FechaAperturaUtc,i.FechaResolucionUtc))/60.0 HorasMinimas,MAX(DATEDIFF(MINUTE,i.FechaAperturaUtc,i.FechaResolucionUtc))/60.0 HorasMaximas FROM dbo.IncidenciaMedidor i JOIN dbo.Medidor md ON md.idMedidor=i.idMedidor JOIN dbo.TipoMedidor tm ON tm.idTipoMedidor=md.idTipoMedidor CROSS APPLY(SELECT " + areaExpression + @" Area) x LEFT JOIN dbo.MotivoMedidor m ON m.idMotivo=i.idMotivo WHERE i.FechaResolucionUtc>=@from AND i.FechaResolucionUtc<@to AND " + incidentAreaScope + " GROUP BY x.Area,m.Nombre ORDER BY Casos DESC", cloneParams(incidentParameters)).ToList();
+            }
+            var states = new List<DashboardState>();
+            if (incluyeArea("ADMINISTRACION"))
+            {
+                states.AddRange(db.Database.SqlQuery<DashboardState>(@"SELECT 'Altas' Proceso,'ADMINISTRACION' Area,Estado,COUNT_BIG(*) Cantidad FROM dbo.AltaSocio WHERE (@area IS NULL OR @area='ADMINISTRACION') GROUP BY Estado UNION ALL SELECT 'Documentación','ADMINISTRACION',Estado,COUNT_BIG(*) FROM dbo.DocumentoPersona WHERE (@area IS NULL OR @area='ADMINISTRACION') GROUP BY Estado", P("@area", gerente ? (object)filter.Area : null)).ToList());
+            }
+            var team = gerente ? new List<string>() : areasPermitidas;
+            var pState = new[] { P("@area", gerente ? (object)filter.Area : null), P("@manager", gerente), P("@employee", LaboralAccess.Empleado(db, Principal)), P("@team", string.Join(",", team)), P("@isLeader", profile.Any(x => x.Encargado)) };
+            states.AddRange(db.Database.SqlQuery<DashboardState>(@"SELECT 'Tareas' Proceso,t.Area,CONVERT(nvarchar(60),t.Estado) Estado,COUNT_BIG(*) Cantidad FROM dbo.TareaLaboral t WHERE (@manager=1 AND (@area IS NULL OR t.Area=@area)) OR (@manager=0 AND t.Area IN (SELECT value FROM STRING_SPLIT(@team,',')) AND (t.idEmpleadoAsignado=@employee OR @isLeader=1)) GROUP BY t.Area,t.Estado", cloneParams(pState)).ToList());
+            states.AddRange(db.Database.SqlQuery<DashboardState>(@"SELECT 'Solicitudes' Proceso,a.Area,es.NombreEstado Estado,COUNT_BIG(*) Cantidad FROM dbo.SolicitudServicio s JOIN dbo.EstadoSolicitudServicio es ON es.idEstadoSolicitud=s.idEstadoSolicitud LEFT JOIN dbo.AreaServicio a ON a.idServicio=s.idServicio WHERE (@area IS NULL OR a.Area=@area) AND (@manager=1 OR a.Area IN (SELECT value FROM STRING_SPLIT(@team,','))) GROUP BY a.Area,es.NombreEstado", cloneParams(pState)).ToList());
+            if (incluyeArea("AGUA") || incluyeArea("ENERGIA"))
+                states.AddRange(db.Database.SqlQuery<DashboardState>(@"SELECT 'Mediciones' Proceso,CASE WHEN tm.Nombre='Agua' THEN 'AGUA' ELSE 'ENERGIA' END Area,CONVERT(nvarchar(60),d.Estado) Estado,COUNT_BIG(*) Cantidad FROM dbo.RutaMedicionDetalle d JOIN dbo.RutaMedicion r ON r.idRutaMedicion=d.idRutaMedicion JOIN dbo.Medidor m ON m.idMedidor=d.idMedidor JOIN dbo.TipoMedidor tm ON tm.idTipoMedidor=m.idTipoMedidor WHERE r.Fecha>=@month AND (@area IS NULL OR @area=CASE WHEN tm.Nombre='Agua' THEN 'AGUA' ELSE 'ENERGIA' END) AND (@manager=1 OR CASE WHEN tm.Nombre='Agua' THEN 'AGUA' ELSE 'ENERGIA' END IN (SELECT value FROM STRING_SPLIT(@team,','))) GROUP BY tm.Nombre,d.Estado", cloneParams(pState).Concat(new[] { P("@month", month) }).ToArray()).ToList());
+            if (incluyeArea("INTERNET"))
+                states.AddRange(db.Database.SqlQuery<DashboardState>(@"SELECT 'Facturación Internet' Proceso,'INTERNET' Area,COALESCE(d.Resultado,'Sin respuesta') Estado,COUNT_BIG(*) Cantidad FROM dbo.LoteFacturacionInternet l JOIN dbo.LoteFacturacionInternetDetalle d ON d.idLote=l.idLote WHERE l.Periodo=@periodo AND l.Estado<>'Anulado' AND (@area IS NULL OR @area='INTERNET') GROUP BY d.Resultado", P("@periodo", localNow.ToString("yyyy-MM")), P("@area",gerente?(object)filter.Area:null)));
+
+            var quality = new List<DashboardQuality>();
+            quality.AddRange(db.Database.SqlQuery<DashboardQuality>(@"WITH R AS(SELECT Area,Accion Resultado,COUNT_BIG(*) Cantidad FROM dbo.AuditoriaLaboral WHERE FechaUtc>=@from AND FechaUtc<@to AND Accion IN ('Aprobar','Rechazar','Devolver') AND ((@manager=1 AND (@area IS NULL OR Area=@area)) OR (@manager=0 AND Area IN (SELECT value FROM STRING_SPLIT(@team,',')))) GROUP BY Area,Accion),D AS(SELECT Area,SUM(Cantidad) Denominador FROM R GROUP BY Area) SELECT 'Tareas' Proceso,R.Area,'LABORAL' Contexto,R.Resultado,R.Cantidad,D.Denominador,CAST(R.Cantidad*100.0/NULLIF(D.Denominador,0) AS decimal(6,2)) Porcentaje FROM R JOIN D ON D.Area=R.Area", cloneParams(parameters).Concat(new[] { P("@from",utc(month)),P("@to",utc(tomorrow)),P("@manager",gerente),P("@team",string.Join(",",areasPermitidas)) }).ToArray()).ToList());
+            if (incluyeArea("ADMINISTRACION"))
+                quality.AddRange(db.Database.SqlQuery<DashboardQuality>(@"WITH R AS(SELECT EstadoNuevo Resultado,COUNT_BIG(*) Cantidad FROM dbo.HistorialDocumentoPersona WHERE FechaUtc>=@from AND FechaUtc<@to AND (@area IS NULL OR @area='ADMINISTRACION') GROUP BY EstadoNuevo),D AS(SELECT SUM(Cantidad) Denominador FROM R) SELECT 'Documentación' Proceso,'ADMINISTRACION' Area,'DOCUMENTO_PERSONA_REVISION' Contexto,R.Resultado,R.Cantidad,D.Denominador,CAST(R.Cantidad*100.0/NULLIF(D.Denominador,0) AS decimal(6,2)) Porcentaje FROM R CROSS JOIN D", range(utc(month),utc(tomorrow))));
+            if (incluyeArea("AGUA") || incluyeArea("ENERGIA"))
+                quality.AddRange(db.Database.SqlQuery<DashboardQuality>(@"SELECT 'Correcciones de lectura' Proceso,c.Area,'LECTURA_CORRECCION' Contexto,'Corregida' Resultado,COUNT_BIG(*) Cantidad,(SELECT COUNT_BIG(*) FROM dbo.Medicion m JOIN dbo.ServicioSocio ss ON ss.idServicioSocio=m.idServicioSocio JOIN dbo.AreaServicio a ON a.idServicio=ss.idServicio WHERE a.Area=c.Area AND m.FechaLectura>=@from AND m.FechaLectura<@to) Denominador,CAST(COUNT_BIG(*)*100.0/NULLIF((SELECT COUNT_BIG(*) FROM dbo.Medicion m JOIN dbo.ServicioSocio ss ON ss.idServicioSocio=m.idServicioSocio JOIN dbo.AreaServicio a ON a.idServicio=ss.idServicio WHERE a.Area=c.Area AND m.FechaLectura>=@from AND m.FechaLectura<@to),0) AS decimal(6,2)) Porcentaje FROM dbo.CorreccionLecturaLaboral c WHERE c.FechaUtc>=@from AND c.FechaUtc<@to AND ((@manager=1 AND (@area IS NULL OR c.Area=@area)) OR (@manager=0 AND c.Area IN (SELECT value FROM STRING_SPLIT(@team,',')))) GROUP BY c.Area", cloneParams(parameters).Concat(new[] { P("@from",utc(month)),P("@to",utc(tomorrow)),P("@manager",gerente),P("@team",string.Join(",",areasPermitidas)) }).ToArray()));
+            var unavailable = new List<string>();
+            if (incluyeArea("ADMINISTRACION")) unavailable.Add("Documentos históricos previos a la nueva migración: no se pueden reconstruir revisiones ni clasificar sus textos libres por motivo sin suponer equivalencias.");
+            if (incluyeArea("AGUA") || incluyeArea("ENERGIA")) unavailable.Add("Lecturas no realizadas: falta el historial de visitas esperadas para calcular cumplimiento; una corrección se cuenta como evento separado.");
+            if (gerente) unavailable.Add("Facturación de otros servicios: el sistema externo no devuelve aquí archivos de facturas ni un historial de intercambios comparable al lote de Internet.");
+            if (!incidenceSchema && (incluyeArea("AGUA") || incluyeArea("ENERGIA"))) unavailable.Add("Incidencias de medidor: ejecutar 20261014_IncidenciasMedidor.sql para habilitar recurrencia, motivos vigentes y tiempos de resolución; no se enlazan eventos históricos por suposición.");
+            else if (incluyeArea("AGUA") || incluyeArea("ENERGIA")) unavailable.Add("Los tiempos de resolución por motivo describen incidencias cerradas durante el mes; no incluyen incidencias aún abiertas.");
+            unavailable.Add("La recepción semanal de solicitudes se cuenta desde que la API registra SolicitudCreada; los registros anteriores a ese evento no tienen fecha de recepción verificable en la bitácora.");
+            return Ok(new { area = filter.Area, esGerencia = gerente, areasPermitidas, actualizadoUtc = DateTime.UtcNow, periodos = new { hoyDesdeLocal = today, hoyHastaLocalExclusivo = tomorrow, mesDesdeLocal = month, mesHastaLocalExclusivo = tomorrow, comparacionDesdeLocal = compareStart, comparacionHastaLocalExclusivo = compareEnd, tendenciaDesdeLocal = trendStartLocal, mesActualIncompleto = localNow.Day < DateTime.DaysInMonth(localNow.Year, localNow.Month), periodoOperativo = localNow.ToString("yyyy-MM") }, coberturaEventosDesdeUtc = coverage, actividadHoy = daily, motivosMes = motives, motivosDocumentacionMes = motives.Where(x => x.Contexto == "DOCUMENTO_PERSONA_RECHAZO").ToList(), tendencias = trends, semanasFlujo = weekly, pendientesAntiguedad = ageing, medidoresRecurrentes = repeatMeters, motivosIncidenciasAbiertas = incidentMotives, tiemposResolucionPorMotivo = motiveResolution, comparacionMensualEventos = monthComparison, estadosProcesos = states, estadosTareas = new List<DashboardState>(), indicadoresCalidad = quality, pendientesDeDatos = unavailable });
         }
 
         [HttpGet, Route("registros")]
@@ -259,10 +353,10 @@ namespace CooperativaAPI.Controllers
             {
                 var employee = LaboralAccess.Empleado(db, Principal);
                 if (!employee.HasValue) return where + " AND 1=0";
-                var areas = LaboralAccess.Perfil(db, Principal).Where(a => a.Encargado).Select(a => a.Area).ToList();
+                var areas = LaboralAccess.Perfil(db, Principal).Where(a => a.Encargado || a.Funciones.Contains("ESTADISTICAS")).Select(a => a.Area).ToList();
                 p.Add(P("@actorEmpleado", employee.Value));
-                if (areas.Count == 0) where += " AND (e.idEmpleado=@actorEmpleado OR e.idEmpleadoActor=@actorEmpleado)";
-                else { where += " AND (e.Area IN (SELECT value FROM STRING_SPLIT(@areas,',')) OR e.idEmpleado=@actorEmpleado OR e.idEmpleadoActor=@actorEmpleado)"; p.Add(P("@areas", string.Join(",", areas))); }
+                if (areas.Count == 0) where += " AND (e.Area IS NULL AND (e.idEmpleado=@actorEmpleado OR e.idEmpleadoActor=@actorEmpleado))";
+                else { where += " AND (e.Area IN (SELECT value FROM STRING_SPLIT(@areas,',')) OR (e.Area IS NULL AND (e.idEmpleado=@actorEmpleado OR e.idEmpleadoActor=@actorEmpleado)))"; p.Add(P("@areas", string.Join(",", areas))); }
             }
             return where;
         }
@@ -337,6 +431,18 @@ namespace CooperativaAPI.Controllers
         public long DenominadorEventos { get; set; }
         public decimal PorcentajeDelEvento { get; set; }
     }
+
+    public sealed class DashboardEvent { public string Area { get; set; } public string Contexto { get; set; } public string CodigoEvento { get; set; } public long Cantidad { get; set; } }
+    public sealed class DashboardMotive { public string Area { get; set; } public string Contexto { get; set; } public string CodigoEvento { get; set; } public int? idMotivoEvento { get; set; } public int? idMotivoDocumento { get; set; } public int? idMotivoLaboral { get; set; } public string Motivo { get; set; } public bool MotivoDesconocido { get; set; } public long Cantidad { get; set; } public long Denominador { get; set; } }
+    public sealed class DashboardTrend { public DateTime Periodo { get; set; } public string Area { get; set; } public string Contexto { get; set; } public long Cantidad { get; set; } }
+    public sealed class DashboardFlowWeek { public DateTime Semana { get; set; } public string Area { get; set; } public string Proceso { get; set; } public string Tipo { get; set; } public long Cantidad { get; set; } }
+    public sealed class DashboardAgeing { public string Area { get; set; } public string Proceso { get; set; } public string Rango { get; set; } public long Cantidad { get; set; } }
+    public sealed class DashboardRepeat { public string Area { get; set; } public long Cantidad { get; set; } }
+    public sealed class DashboardIncidentMotive { public string Area { get; set; } public string Motivo { get; set; } public long Cantidad { get; set; } }
+    public sealed class DashboardMotiveResolution { public string Area { get; set; } public string Motivo { get; set; } public long Casos { get; set; } public double HorasPromedio { get; set; } public double HorasMinimas { get; set; } public double HorasMaximas { get; set; } }
+    public sealed class DashboardPeriodCount { public string Periodo { get; set; } public long Cantidad { get; set; } }
+    public sealed class DashboardState { public string Proceso { get; set; } public string Area { get; set; } public string Estado { get; set; } public long Cantidad { get; set; } }
+    public sealed class DashboardQuality { public string Proceso { get; set; } public string Area { get; set; } public string Contexto { get; set; } public string Resultado { get; set; } public long Cantidad { get; set; } public long? Denominador { get; set; } public decimal? Porcentaje { get; set; } }
 
     public sealed class EventoOperativoRegistro
     {
