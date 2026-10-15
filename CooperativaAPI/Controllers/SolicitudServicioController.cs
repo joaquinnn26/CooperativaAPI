@@ -32,6 +32,9 @@ namespace CooperativaAPI.Controllers
         {
             try
             {
+                var empleado = LaboralAccess.Empleado(db, (ClaimsPrincipal)User);
+                var serviciosDocumentales = db.Servicio.Select(s => s.idServicio).ToList()
+                    .Where(id => LaboralAccess.Encargado(db, empleado, LaboralAccess.AreaServicio(db, id))).ToList();
                 var solicitudes = db.SolicitudServicio
                     .Select(ss => new
                     {
@@ -45,7 +48,7 @@ namespace CooperativaAPI.Controllers
                         ss.FechaSolicitud,
                         ss.Observaciones,
                         ss.MotivoRechazo,
-                        Documentos = ss.DocumentoSolicitud.Select(d => new
+                        Documentos = ss.DocumentoSolicitud.Where(d => serviciosDocumentales.Contains(ss.idServicio)).Select(d => new
                         {
                             d.idDocumentoSolicitud,
                             d.idRequisitoServicio,
@@ -142,7 +145,7 @@ namespace CooperativaAPI.Controllers
 
                 var areaServicio = LaboralAccess.AreaServicio(db, solicitud.idServicio);
                 var derivaDirecto = new[] { "AGUA", "ENERGIA", "INTERNET" }.Contains(areaServicio);
-                var estadoEnRevision = ObtenerOCrearEstadoSolicitud(derivaDirecto ? "Pendiente instalacion" : "En Revision");
+                var estadoEnRevision = ObtenerOCrearEstadoSolicitud(derivaDirecto ? "Pendiente documentacion" : "En Revision");
                 solicitud.idEstadoSolicitud = estadoEnRevision.idEstadoSolicitud;
                 solicitud.MotivoRechazo = null;
 
@@ -153,7 +156,7 @@ namespace CooperativaAPI.Controllers
                     idEstadoSolicitud = estadoEnRevision.idEstadoSolicitud,
                     FechaCambio = DateTime.Now,
                     Observaciones = derivaDirecto
-                        ? "Solicitud derivada automaticamente al area " + areaServicio + " para coordinar la instalacion."
+                        ? "Solicitud derivada automaticamente al area " + areaServicio + " para revisar la documentacion antes de asignar la instalacion."
                         : "Solicitud recibida; pendiente de clasificacion administrativa."
                 });
                 db.SaveChanges();
@@ -575,6 +578,10 @@ namespace CooperativaAPI.Controllers
             db.ServicioSocio.Add(servicioSocio);
             db.SaveChanges();
             db.Database.ExecuteSqlCommand("INSERT dbo.SolicitudConexion(idSolicitudServicio,idServicioSocio) VALUES(@solicitud,@conexion)",new System.Data.SqlClient.SqlParameter("@solicitud",idSolicitud),new System.Data.SqlClient.SqlParameter("@conexion",servicioSocio.idServicioSocio));
+            db.Database.ExecuteSqlCommand(@"INSERT dbo.UbicacionServicio(idServicioSocio,Direccion)
+                SELECT @conexion,LTRIM(RTRIM(CONCAT(p.Calle,' ',p.Numero))) FROM dbo.Socio so JOIN dbo.Persona p ON p.idPersona=so.idPersona
+                WHERE so.idSocio=@socio AND NULLIF(LTRIM(RTRIM(p.Calle)),'') IS NOT NULL",
+                new System.Data.SqlClient.SqlParameter("@conexion",servicioSocio.idServicioSocio),new System.Data.SqlClient.SqlParameter("@socio",idSocio));
             return servicioSocio;
         }
 

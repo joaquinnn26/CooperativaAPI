@@ -27,8 +27,8 @@ namespace CooperativaAPI.Controllers {
     var documentosCompartidos=seleccion==null?disponibles.Select(d=>(int)d["idDocumentoPersona"]).ToList():seleccion.Values<int>().Distinct().ToList();
     if(documentosCompartidos.Any(id=>!disponibles.Any(d=>(int)d["idDocumentoPersona"]==id)))throw new ArgumentException("Uno de los documentos seleccionados ya no está disponible. Actualizá la ficha del socio.");
     if(db.SolicitudServicio.Any(s=>s.idSocio==socio && s.idServicio==servicio && s.FechaResolucion==null))throw new ArgumentException("El socio ya tiene una solicitud pendiente para ese servicio.");
-    var estadoNombre=areaServicio==null?"En Revision":"Pendiente instalacion";var estado=db.EstadoSolicitudServicio.FirstOrDefault(e=>e.NombreEstado==estadoNombre);if(estado==null)throw new ArgumentException("Falta configurar el estado de revisión de solicitudes.");
-    var solicitud=new SolicitudServicio{idSocio=socio,idServicio=servicio,idEstadoSolicitud=estado.idEstadoSolicitud,Observaciones=descripcion,FechaSolicitud=DateTime.Now};db.SolicitudServicio.Add(solicitud);db.SaveChanges();origen=solicitud.idSolicitudServicio;tarea=areaServicio==null?CrearTarea("ADMINISTRACION","Solicitud",origen,socio,null,"Clasificar solicitud #"+origen):CrearTarea(area,"Instalacion",origen,socio,null,"Instalacion de "+servicioDb.Nombre);db.HistorialEstadoSolicitud.Add(new HistorialEstadoSolicitud{idSolicitudServicio=origen,idEstadoSolicitud=estado.idEstadoSolicitud,idEmpleado=Empleado,FechaCambio=DateTime.Now,Observaciones=areaServicio==null?"Pendiente de clasificacion administrativa.":"Derivada automaticamente al area "+area+" para coordinar la instalacion."});
+    var estadoNombre=areaServicio==null?"En Revision":"Pendiente documentacion";var estado=db.EstadoSolicitudServicio.FirstOrDefault(e=>e.NombreEstado==estadoNombre);if(estado==null)throw new ArgumentException("Falta configurar el estado de revisión de solicitudes.");
+    var solicitud=new SolicitudServicio{idSocio=socio,idServicio=servicio,idEstadoSolicitud=estado.idEstadoSolicitud,Observaciones=descripcion,FechaSolicitud=DateTime.Now};db.SolicitudServicio.Add(solicitud);db.SaveChanges();origen=solicitud.idSolicitudServicio;tarea=areaServicio==null?CrearTarea("ADMINISTRACION","Solicitud",origen,socio,null,"Clasificar solicitud #"+origen):CrearTarea(area,"Instalacion",origen,socio,null,"Instalacion de "+servicioDb.Nombre);db.HistorialEstadoSolicitud.Add(new HistorialEstadoSolicitud{idSolicitudServicio=origen,idEstadoSolicitud=estado.idEstadoSolicitud,idEmpleado=Empleado,FechaCambio=DateTime.Now,Observaciones=areaServicio==null?"Pendiente de clasificacion administrativa.":"Derivada automaticamente al area "+area+" para revisar la documentacion antes de asignar la instalacion."});
     foreach(var documento in documentosCompartidos)db.Database.ExecuteSqlCommand("INSERT dbo.SolicitudDocumentoLegajo(idSolicitudServicio,idDocumentoPersona,idUsuarioCompartio) VALUES(@s,@d,@u)",P("@s",origen),P("@d",documento),P("@u",LaboralAccess.Usuario(Principal)));
     data["DocumentosLegajoCompartidos"]=new JArray(documentosCompartidos);
    } else throw new ArgumentException("Tipo de trámite inválido.");
@@ -105,11 +105,11 @@ namespace CooperativaAPI.Controllers {
      FROM dbo.HistorialEstadoSolicitud h JOIN dbo.EstadoSolicitudServicio es ON es.idEstadoSolicitud=h.idEstadoSolicitud
      LEFT JOIN dbo.Empleado e ON e.idEmpleado=h.idEmpleado LEFT JOIN dbo.Persona p ON p.idPersona=e.idPersona WHERE h.idSolicitudServicio=@id
      UNION ALL
-     SELECT au.FechaUtc,au.EstadoNuevo,CASE WHEN au.Accion='NoSePudoInstalar' THEN N'No se pudo realizar la visita. Motivo: '+COALESCE(au.Motivo,N'') WHEN au.Accion='Asignar' THEN N'El encargado asigno o reprogramo la visita.' WHEN au.Accion='Iniciar' THEN N'El operario inicio la instalacion.' WHEN au.Accion='EnviarRevision' THEN N'La instalacion fue enviada a revision del encargado.' WHEN au.Accion='Aprobar' THEN N'El encargado aprobo la instalacion.' WHEN au.Accion='Cerrar' THEN N'La instalacion fue confirmada.' ELSE au.Accion END,
+     SELECT au.FechaUtc,au.EstadoNuevo,CASE WHEN au.Accion='AprobarDocumentos' THEN N'Documentacion aprobada. Instalacion pendiente de asignacion.' WHEN au.Accion='NoSePudoInstalar' THEN N'No se pudo realizar la visita. Motivo: '+COALESCE(au.Motivo,N'') WHEN au.Accion='Asignar' THEN N'El encargado asigno o reprogramo la visita.' WHEN au.Accion='Iniciar' THEN N'El operario inicio la instalacion.' WHEN au.Accion='EnviarRevision' THEN N'La instalacion fue enviada a revision del encargado.' WHEN au.Accion='Aprobar' THEN N'El encargado aprobo la instalacion.' WHEN au.Accion='Cerrar' THEN N'La instalacion fue confirmada.' ELSE au.Accion END,
       t.Area,CAST(N'Actividad' AS nvarchar(40)),COALESCE(CONCAT(p2.Nombre,' ',p2.Apellido),N'Equipo del area')
      FROM dbo.AuditoriaLaboral au JOIN dbo.TareaLaboral t ON t.idTarea=au.idTarea
      LEFT JOIN dbo.Empleado e2 ON e2.idEmpleado=au.idEmpleado LEFT JOIN dbo.Persona p2 ON p2.idPersona=e2.idPersona
-     WHERE t.Categoria='Instalacion' AND t.OrigenId=@id AND au.Accion IN('DerivarSolicitud','Asignar','Iniciar','NoSePudoInstalar','EnviarRevision','Aprobar','Cerrar')
+     WHERE t.Categoria='Instalacion' AND t.OrigenId=@id AND au.Accion IN('AprobarDocumentos','DerivarSolicitud','Asignar','Iniciar','NoSePudoInstalar','EnviarRevision','Aprobar','Cerrar')
      ORDER BY FechaUtc",P("@id",id));
   });}
   [HttpGet,Route("conexiones")]
@@ -172,7 +172,10 @@ namespace CooperativaAPI.Controllers {
   [HttpGet,Route("lecturas/{id:int}/historial")]
   public IHttpActionResult HistorialLectura(int id){return Read(()=>{
    var m=db.Medicion.Find(id);if(m==null)throw new ArgumentException("Lectura inexistente.");string area=LaboralAccess.AreaServicio(db,db.ServicioSocio.Find(m.idServicioSocio).idServicio);Exigir(Jefe(area) || LaboralAccess.Gerencia(db,Principal));
-   return Rows("SELECT c.*,u.Usuario Responsable,m.Nombre Motivo FROM dbo.CorreccionLecturaLaboral c JOIN dbo.UsuarioSistema u ON u.idUsuarioSistema=c.idUsuarioSistema JOIN dbo.MotivoLaboral m ON m.idMotivo=c.idMotivo WHERE c.idMedicion=@id ORDER BY c.idCorreccion DESC",P("@id",id));
+   return Rows(@"SELECT c.*,COALESCE(NULLIF(LTRIM(RTRIM(CONCAT(p.Nombre,' ',p.Apellido))),''),NULLIF(u.Usuario,''),N'Responsable no registrado') Responsable,m.Nombre Motivo
+    FROM dbo.CorreccionLecturaLaboral c JOIN dbo.UsuarioSistema u ON u.idUsuarioSistema=c.idUsuarioSistema
+    LEFT JOIN dbo.Empleado e ON e.idEmpleado=u.idEmpleado LEFT JOIN dbo.Persona p ON p.idPersona=e.idPersona
+    JOIN dbo.MotivoLaboral m ON m.idMotivo=c.idMotivo WHERE c.idMedicion=@id ORDER BY c.idCorreccion DESC",P("@id",id));
   });}
  }
 }
