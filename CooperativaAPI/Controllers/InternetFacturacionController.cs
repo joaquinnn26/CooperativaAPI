@@ -24,7 +24,10 @@ namespace CooperativaAPI.Controllers {
   private static SqlParameter P(string name,object value){return LaboralAccess.P(name,value);}
 
   private void ExigirFacturacion(){
-   if(!LaboralAccess.Tiene(db,Empleado,"INTERNET","FACTURACION"))throw new UnauthorizedAccessException("Necesitás la función de facturación de Internet.");
+   bool permitido=User.IsInRole("Administrador") || LaboralAccess.Encargado(db,Empleado,"ADMINISTRACION")
+    || LaboralAccess.Tiene(db,Empleado,"ADMINISTRACION","FACTURACION")
+    || LaboralAccess.Encargado(db,Empleado,"INTERNET") || LaboralAccess.Tiene(db,Empleado,"INTERNET","FACTURACION");
+   if(!permitido)throw new UnauthorizedAccessException("Necesitás permisos de facturación de Administración o Internet.");
   }
   private IHttpActionResult Read(Func<object> action){
    try{ExigirFacturacion();return Ok(action());}
@@ -211,6 +214,7 @@ namespace CooperativaAPI.Controllers {
    var details=db.Database.SqlQuery<ApplyRow>(@"SELECT d.idServicioSocio,d.idSocio,d.idServicio,d.Resultado,d.ReferenciaFacturaExterna,d.NumeroFactura,d.FechaEmision,d.ImporteFactura,d.FechaVencimiento,d.LinkPago,d.MotivoRechazo
     FROM dbo.LoteFacturacionInternetDetalle d WHERE d.idLote=@id ORDER BY d.idServicioSocio",P("@id",id)).ToList();
    if(details.Count!=lot.CantidadFilas || details.Any(x=>string.IsNullOrEmpty(x.Resultado)))throw new ArgumentException("El detalle del lote está incompleto; volvé a validar el archivo.");
+   if(!Empleado.HasValue)throw new ArgumentException("La cuenta debe estar vinculada a un empleado para registrar al responsable de las facturas.");
    int created=0,rejected=0;int employee=Empleado.Value;
    foreach(var d in details){
     if(d.Resultado=="RECHAZADA"){rejected++;continue;}

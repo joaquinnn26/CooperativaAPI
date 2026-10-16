@@ -131,7 +131,7 @@ namespace CooperativaAPI.Controllers {
   public IHttpActionResult Facturas(int pagina=1,string area=null){return Read(()=>{
    if(pagina<1 || pagina>100000)throw new ArgumentException("Página inválida.");
    bool personal=User.IsInRole("Socio");int? socio=personal?int.Parse(Principal.FindFirst("idSocio").Value):(int?)null;
-   bool adminFact=Funcion("ADMINISTRACION","FACTURACION") || Jefe("ADMINISTRACION");
+   bool adminFact=User.IsInRole("Administrador") || Funcion("ADMINISTRACION","FACTURACION") || Jefe("ADMINISTRACION");
    bool internetFact=Funcion("INTERNET","FACTURACION");
    Exigir(personal || adminFact || internetFact);
    var where=" WHERE f.Activo=1 AND (@s IS NULL OR f.idSocio=@s) AND (@all=1 OR a.Area='INTERNET') AND (@area IS NULL OR a.Area=@area)";

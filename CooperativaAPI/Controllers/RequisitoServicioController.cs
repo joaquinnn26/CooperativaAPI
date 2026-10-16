@@ -14,15 +14,17 @@ namespace CooperativaAPI.Controllers
         [HttpGet]
         [Route("")]
         [JwtAuthorize(Roles = "Administrador,Socio")]
-        public IHttpActionResult GetAll()
+        public IHttpActionResult GetAll(bool incluirInactivos = false)
         {
+            if (incluirInactivos && !User.IsInRole("Administrador"))
+                return StatusCode(System.Net.HttpStatusCode.Forbidden);
             try
             {
                 var requisitos = (
                     from r in db.RequisitoServicio
                     join s in db.Servicio
                         on r.idServicio equals s.idServicio
-                    where r.Activo == true
+                    where incluirInactivos || r.Activo == true
                     select new
                     {
                         r.idRequisitoServicio,
@@ -30,6 +32,7 @@ namespace CooperativaAPI.Controllers
                         r.Nombre,
                         r.Descripcion,
                         r.Obligatorio,
+                        r.Activo,
                         Servicio = s.Nombre
                     }
                 ).ToList();
