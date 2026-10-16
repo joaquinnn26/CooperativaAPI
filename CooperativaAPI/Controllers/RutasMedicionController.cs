@@ -264,6 +264,7 @@ namespace CooperativaAPI.Controllers
             try
             {
                 if (request == null) return BadRequest("La lectura es obligatoria.");
+                if (String.IsNullOrWhiteSpace(request.FotoBase64)) return BadRequest("Adjuntá la foto del medidor antes de guardar la lectura.");
                 var idEmpleadoActual = ObtenerClaimEntero("idEmpleado");
                 if (!idEmpleadoActual.HasValue) return Unauthorized();
                 request.IdEmpleado = idEmpleadoActual.Value;
@@ -539,6 +540,10 @@ namespace CooperativaAPI.Controllers
                         return BadRequest("Hay estados de detalle no resueltos.");
                     }
 
+                    var sinFoto=db.Database.SqlQuery<int>(@"SELECT COUNT(*) FROM dbo.RutaMedicionDetalle d WHERE d.idRutaMedicion=@id AND d.Estado='Medido'
+                     AND (d.idMedicion IS NULL OR NOT EXISTS(SELECT 1 FROM dbo.EvidenciaLecturaLaboral f WHERE f.idMedicion=d.idMedicion AND DATALENGTH(f.Contenido)>0))",LaboralAccess.P("@id",idRuta)).Single();
+                    if(sinFoto>0)return BadRequest("No se puede finalizar: hay "+sinFoto+" lecturas realizadas sin foto del medidor. Adjuntá las fotos pendientes.");
+
                     var estadoAnterior=ruta.Estado;
                     ruta.Estado = "Finalizada";
                     ruta.FechaFinalizacion = DateTime.UtcNow;
@@ -572,6 +577,25 @@ namespace CooperativaAPI.Controllers
             using(var permisos=new CooperativaEntities()) { if(!(LaboralAccess.Gerencia(permisos,(ClaimsPrincipal)User) || LaboralAccess.LecturistaRuta(permisos,(ClaimsPrincipal)User,detalle.idRutaMedicion) || LaboralAccess.LecturistaRuta(permisos,(ClaimsPrincipal)User,detalle.idRutaMedicion,true)))return StatusCode(HttpStatusCode.Forbidden); }
             var file=db.Database.SqlQuery<EvidenciaFotoRuta>("SELECT TOP 1 Nombre,Tipo,Contenido FROM dbo.EvidenciaLecturaLaboral WHERE idMedicion=@id ORDER BY idEvidencia DESC",new System.Data.SqlClient.SqlParameter("@id",idMedicion)).FirstOrDefault();
             if(file==null)return NotFound();var response=new HttpResponseMessage(HttpStatusCode.OK){Content=new ByteArrayContent(file.Contenido)};response.Content.Headers.ContentType=new MediaTypeHeaderValue(file.Tipo);response.Headers.Add("X-Content-Type-Options","nosniff");response.Headers.CacheControl=new CacheControlHeaderValue{NoStore=true};return ResponseMessage(response);
+        }
+
+        [HttpPost,Route("mediciones/{idMedicion:int}/foto")]
+        [JwtAuthorize(Roles="Empleado")]
+        public IHttpActionResult AdjuntarFotoLectura(int idMedicion,[FromBody] CargarLecturaRutaRequest request) {
+            if(request==null || String.IsNullOrWhiteSpace(request.FotoBase64))return BadRequest("Adjuntá una foto del medidor.");
+            byte[] bytes;try{bytes=Convert.FromBase64String(request.FotoBase64);}catch(FormatException){return BadRequest("La foto no tiene formato válido.");}
+            bool valido=bytes.Length>0 && bytes.Length<=2*1024*1024 && ((request.TipoFoto=="image/jpeg" && bytes.Length>3 && bytes[0]==255 && bytes[1]==216 && bytes[2]==255) || (request.TipoFoto=="image/png" && bytes.Length>=8 && bytes.Take(8).SequenceEqual(new byte[]{137,80,78,71,13,10,26,10})));
+            if(!valido)return BadRequest("Adjuntá una foto JPEG o PNG válida de hasta 2 MB.");
+            using(var tx=db.Database.BeginTransaction(IsolationLevel.Serializable)) {
+                var detalle=db.RutasMedicionDetalle.Include(d=>d.RutaMedicion).FirstOrDefault(d=>d.idMedicion==idMedicion);
+                if(detalle==null)return NotFound();
+                var ruta=detalle.RutaMedicion;
+                if(!LaboralAccess.LecturistaRuta(readDb,(ClaimsPrincipal)User,ruta.idRutaMedicion,false))return StatusCode(HttpStatusCode.Forbidden);
+                if(ruta.Estado!="Pendiente" && ruta.Estado!="EnCurso")return BadRequest("La hoja de ruta ya está cerrada.");
+                if(db.Database.SqlQuery<int>("SELECT 1 FROM dbo.EvidenciaLecturaLaboral WHERE idMedicion=@id",LaboralAccess.P("@id",idMedicion)).Any())return BadRequest("Esta lectura ya tiene una foto registrada.");
+                db.Database.ExecuteSqlCommand("INSERT dbo.EvidenciaLecturaLaboral(idMedicion,idUsuarioSistema,Nombre,Tipo,Contenido) VALUES(@m,@u,@n,@t,@b)",LaboralAccess.P("@m",idMedicion),LaboralAccess.P("@u",LaboralAccess.Usuario((ClaimsPrincipal)User)),LaboralAccess.P("@n",Path.GetFileName(request.NombreFoto??"medidor")),LaboralAccess.P("@t",request.TipoFoto),LaboralAccess.P("@b",bytes));
+                AuditarRuta(ruta,"AdjuntarFotoLectura");tx.Commit();return Ok(new{Guardada=true});
+            }
         }
 
         [HttpPut]

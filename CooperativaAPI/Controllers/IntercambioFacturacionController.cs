@@ -73,10 +73,16 @@ namespace CooperativaAPI.Controllers
             if (idServicio.HasValue && !db.Servicio.Any(s => s.idServicio == idServicio.Value))
                 return BadRequest("El servicio seleccionado no existe.");
 
-            using (var tx = db.Database.BeginTransaction())
+            using (var tx = db.Database.BeginTransaction(System.Data.IsolationLevel.Serializable))
             {
                 try
                 {
+                    var pendientes=db.Database.SqlQuery<int>(@"SELECT COUNT(*) FROM dbo.Medicion m
+JOIN dbo.ServicioSocio ss ON ss.idServicioSocio=m.idServicioSocio JOIN dbo.Socio s ON s.idSocio=ss.idSocio
+WHERE m.Periodo=@p AND s.NumeroSocio IS NOT NULL AND (@s IS NULL OR ss.idServicio=@s)
+AND NOT EXISTS(SELECT 1 FROM dbo.AprobacionLecturaLaboral a WHERE a.idMedicion=m.idMedicion AND a.VersionLectura=m.VersionRevision)",
+                        new System.Data.SqlClient.SqlParameter("@p",periodo),new System.Data.SqlClient.SqlParameter("@s",(object)idServicio??DBNull.Value)).Single();
+                    if(pendientes>0)return Content(HttpStatusCode.Conflict,"No se puede exportar: hay "+pendientes+" lecturas del período pendientes de aprobación del encargado. Revisalas antes de generar el archivo.");
                     var filas = db.Database.SqlQuery<MedicionExportada>(@"
 SELECT m.idMedicion, m.idServicioSocio, s.NumeroSocio, ss.idServicio,
        se.Nombre AS Servicio, m.Periodo, m.FechaLectura, m.ValorLectura, m.ConsumoCalculado

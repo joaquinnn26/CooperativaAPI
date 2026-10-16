@@ -21,6 +21,7 @@ namespace CooperativaAPI.Controllers {
   [HttpPost,Route("tareas/{id:int}/evidencias")]
   public IHttpActionResult Evidencia(int id,JObject data){return Write(()=>{
    var t=Task(id);Exigir((int?)t["idEmpleadoAsignado"]==Empleado && PuedeTrabajar(t));Version(t,data);
+   if((string)t["Categoria"]=="Ruta")throw new ArgumentException("La tarea del recorrido conserva el historial. Registrá las fotos desde la hoja de ruta y revisá las mediciones desde Revisión de lecturas.");
    if(!new[]{"EnCurso","Observada"}.Contains((string)t["Estado"]))throw new ArgumentException("Solo se pueden adjuntar evidencias mientras se realiza o corrige la tarea.");
    string nombre,tipo;var bytes=Archivo(data,out nombre,out tipo);
    db.Database.ExecuteSqlCommand("INSERT dbo.EvidenciaLaboral(idTarea,idUsuarioSistema,Nombre,Tipo,Contenido) VALUES(@t,@u,@n,@tipo,@b); UPDATE dbo.TareaLaboral SET FechaActualizacionUtc=SYSUTCDATETIME() WHERE idTarea=@t",P("@t",id),P("@u",LaboralAccess.Usuario(Principal)),P("@n",nombre),P("@tipo",tipo),P("@b",bytes));

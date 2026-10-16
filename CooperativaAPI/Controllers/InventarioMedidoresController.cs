@@ -17,7 +17,7 @@ namespace CooperativaAPI.Controllers
         public string Marca { get; set; }
         public string Modelo { get; set; }
         public int idTipoMedidor { get; set; }
-        public int idMotivo { get; set; }
+        public int? idMotivo { get; set; }
         public int? idServicioSocio { get; set; }
         public decimal? Lectura { get; set; }
         public string EstadoFisico { get; set; }
@@ -79,6 +79,16 @@ namespace CooperativaAPI.Controllers
         public int? idAsignacion { get; set; }
         public string Anterior { get; set; }
         public string Nuevo { get; set; }
+    }
+    public class IncidenciaMedidorDetalle
+    {
+        public long idIncidencia { get; set; }
+        public DateTime FechaAperturaUtc { get; set; }
+        public DateTime? FechaResolucionUtc { get; set; }
+        public string TipoResolucion { get; set; }
+        public string Motivo { get; set; }
+        public int? idTarea { get; set; }
+        public string EstadoTarea { get; set; }
     }
     public class AsignacionMedidorDto
     {
@@ -222,7 +232,8 @@ namespace CooperativaAPI.Controllers
                     UPDATE dbo.IncidenciaMedidor SET idEventoUltimaDeteccion=@evento,FechaUltimaDeteccionUtc=@fecha WHERE idMedidor=@id AND idEventoResolucion IS NULL
                 ELSE INSERT dbo.IncidenciaMedidor(idMedidor,idEventoDeteccion,idEventoUltimaDeteccion,FechaAperturaUtc,FechaUltimaDeteccionUtc,idMotivo,idUsuarioResponsable) VALUES(@id,@evento,@evento,@fecha,@fecha,@motivo,@usuario)",
                 P("@id",medidorId),P("@evento",idEventoMedidor),P("@fecha",fecha),P("@motivo",motivo?.idMotivo),P("@usuario",Usuario(user)));
-            var tipoResolucion=accion=="Reparacion"?"Reparacion":(accion=="Retirar" && motivoAccion=="Reemplazar"?"Reemplazo":null);
+            // Enviar a reparar no acredita que el problema se haya solucionado.
+            var tipoResolucion=accion=="Revision" && op.EstadoFisico=="Operativo"?"RevisionOperativa":accion=="BajaDefinitiva"?"BajaDefinitiva":(accion=="Retirar" && motivoAccion=="Reemplazar"?"Reemplazo":null);
             if(tipoResolucion!=null) db.Database.ExecuteSqlCommand(@"UPDATE dbo.IncidenciaMedidor SET idEventoResolucion=@evento,FechaResolucionUtc=@fecha,TipoResolucion=@tipo,idUsuarioResolucion=@usuario WHERE idMedidor=@id AND idEventoResolucion IS NULL",P("@evento",idEventoMedidor),P("@fecha",fecha),P("@tipo",tipoResolucion),P("@usuario",Usuario(user)),P("@id",medidorId));
             var conexionEvento=antes?.idServicioSocio??nuevo.idServicioSocio;
             int? servicioEvento=conexionEvento.HasValue?db.ServicioSocio.Where(s=>s.idServicioSocio==conexionEvento.Value).Select(s=>(int?)s.idServicio).SingleOrDefault():null;
@@ -295,10 +306,17 @@ namespace CooperativaAPI.Controllers
                 var e=LaboralAccess.Empleado(db,Principal);var a=LaboralAccess.AreaMedidor(db,id);
                 if(!LaboralAccess.Miembro(db,e,a) || (ficha.idAsignacion.HasValue && !LaboralAccess.Encargado(db,e,a) && !db.Database.SqlQuery<int>("SELECT 1 FROM dbo.TareaLaboral WHERE idEmpleadoAsignado=@e AND idServicioSocio=@c",OperacionesMedidor.P("@e",e),OperacionesMedidor.P("@c",ficha.idServicioSocio)).Any()))return StatusCode(HttpStatusCode.Forbidden);
             }
-            var eventos=db.Database.SqlQuery<EventoMedidorDto>(@"SELECT e.*,u.Usuario Responsable,mot.Accion MotivoAccion,
+            var eventos=db.Database.SqlQuery<EventoMedidorDto>(@"SELECT e.*,
+                COALESCE(NULLIF(LTRIM(RTRIM(CONCAT(actorPersona.Nombre,' ',actorPersona.Apellido))),''),
+                    NULLIF(LTRIM(RTRIM(CONCAT(actorSocioPersona.Nombre,' ',actorSocioPersona.Apellido))),''),NULLIF(u.Usuario,''),
+                    CASE WHEN e.Accion='Migracion' THEN N'Migracion del sistema' ELSE N'Responsable no registrado' END) Responsable,mot.Accion MotivoAccion,
                 (SELECT TOP 1 otro.idMedidor FROM dbo.EventoMedidor otro WHERE otro.OperacionId=e.OperacionId AND otro.idMedidor<>e.idMedidor ORDER BY otro.idEvento) OtroMedidorId,
                 (SELECT TOP 1 m.Numero FROM dbo.EventoMedidor otro JOIN dbo.Medidor m ON m.idMedidor=otro.idMedidor WHERE otro.OperacionId=e.OperacionId AND otro.idMedidor<>e.idMedidor ORDER BY otro.idEvento) OtroMedidorNumero
                 FROM dbo.EventoMedidor e LEFT JOIN dbo.UsuarioSistema u ON u.idUsuarioSistema=e.idUsuarioSistema
+                LEFT JOIN dbo.Empleado actorEmpleado ON actorEmpleado.idEmpleado=u.idEmpleado
+                LEFT JOIN dbo.Persona actorPersona ON actorPersona.idPersona=actorEmpleado.idPersona
+                LEFT JOIN dbo.Socio actorSocio ON actorSocio.idSocio=u.idSocio
+                LEFT JOIN dbo.Persona actorSocioPersona ON actorSocioPersona.idPersona=actorSocio.idPersona
                 LEFT JOIN dbo.MotivoMedidor mot ON mot.idMotivo=e.idMotivo WHERE e.idMedidor=@id ORDER BY e.FechaUtc DESC,e.idEvento DESC",OperacionesMedidor.P("@id",id)).ToList();
             foreach(var e in eventos) { e.FechaUtc=DateTime.SpecifyKind(e.FechaUtc,DateTimeKind.Utc); e.FechaRegistroUtc=DateTime.SpecifyKind(e.FechaRegistroUtc,DateTimeKind.Utc); }
             var asignaciones=db.Database.SqlQuery<AsignacionMedidorDto>(@"SELECT a.*,ss.idSocio,CONCAT(p.Nombre,' ',p.Apellido) Socio,se.Nombre Servicio,
@@ -311,7 +329,13 @@ namespace CooperativaAPI.Controllers
                 if(a.FechaInicio.HasValue) a.FechaInicio=DateTime.SpecifyKind(a.FechaInicio.Value,DateTimeKind.Utc);
                 if(a.FechaFin.HasValue) a.FechaFin=DateTime.SpecifyKind(a.FechaFin.Value,DateTimeKind.Utc);
             }
-            return Ok(new {ficha,eventos,asignaciones});
+            var incidencias=db.Database.SqlQuery<IncidenciaMedidorDetalle>(@"SELECT i.idIncidencia,i.FechaAperturaUtc,i.FechaResolucionUtc,i.TipoResolucion,m.Nombre Motivo,
+                tarea.idTarea,tarea.Estado EstadoTarea FROM dbo.IncidenciaMedidor i LEFT JOIN dbo.MotivoMedidor m ON m.idMotivo=i.idMotivo
+                OUTER APPLY(SELECT TOP 1 t.idTarea,t.Estado FROM dbo.IncidenciaMedidorTarea link JOIN dbo.TareaLaboral t ON t.idTarea=link.idTarea
+                 WHERE link.idIncidencia=i.idIncidencia ORDER BY CASE WHEN t.Estado IN('Cerrada','Rechazada') THEN 1 ELSE 0 END,t.idTarea DESC)tarea
+                WHERE i.idMedidor=@id ORDER BY i.idIncidencia DESC",OperacionesMedidor.P("@id",id)).ToList();
+            foreach(var i in incidencias){i.FechaAperturaUtc=DateTime.SpecifyKind(i.FechaAperturaUtc,DateTimeKind.Utc);if(i.FechaResolucionUtc.HasValue)i.FechaResolucionUtc=DateTime.SpecifyKind(i.FechaResolucionUtc.Value,DateTimeKind.Utc);}
+            return Ok(new {ficha,eventos,asignaciones,incidencias});
         }
         [HttpGet,Route("catalogos")]
         public IHttpActionResult Catalogos() {

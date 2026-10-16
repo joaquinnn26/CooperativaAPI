@@ -11,7 +11,7 @@ namespace CooperativaAPI.Controllers {
    var e=empleado??Empleado;string area=(string)task["Area"];
    return LaboralAccess.Tiene(db,e,area,(string)task["Categoria"]=="Ruta"?"LECTURISTA":area=="ADMINISTRACION"?"ATENCION":"OPERARIO");
   }
-  private bool PuedeVer(JObject task){return LaboralAccess.Gerencia(db,Principal) || Jefe((string)task["Area"]) || ((int?)task["idEmpleadoAsignado"]==Empleado && Empleado.HasValue && PuedeTrabajar(task));}
+  private bool PuedeVer(JObject task){return LaboralAccess.Gerencia(db,Principal) || Jefe((string)task["Area"]) || ((string)task["Categoria"]!="Ruta" && (int?)task["idEmpleadoAsignado"]==Empleado && Empleado.HasValue && PuedeTrabajar(task));}
   private const string TaskContext=@"SELECT t.*,CONCAT(p.Nombre,' ',p.Apellido) Socio,a.Nombre AreaNombre,CONCAT(ep.Nombre,' ',ep.Apellido) Asignado,
    se.Nombre Servicio,COALESCE(NULLIF(LTRIM(RTRIM(u.Direccion)),''),CASE WHEN t.Categoria IN('Solicitud','Instalacion') THEN NULLIF(LTRIM(RTRIM(CONCAT(p.Calle,' ',p.Numero))),'') END) Direccion,u.Ruta,u.Folio,
    (SELECT es.NombreEstado FROM dbo.SolicitudServicio solicitud JOIN dbo.EstadoSolicitudServicio es ON es.idEstadoSolicitud=solicitud.idEstadoSolicitud WHERE solicitud.idSolicitudServicio=t.OrigenId AND t.Categoria IN('Solicitud','Instalacion')) EstadoSolicitud
@@ -23,7 +23,7 @@ namespace CooperativaAPI.Controllers {
 
   [HttpGet,Route("tareas")]
   public IHttpActionResult Tareas(string area=null,string estado=null,int pagina=1){return Read(()=>{
-   Exigir(Empleado.HasValue);if(pagina<1 || pagina>100000)throw new ArgumentException("Página inválida.");
+   Exigir(Empleado.HasValue && PuedeConsultarTareas());if(pagina<1 || pagina>100000)throw new ArgumentException("Página inválida.");
    var scope=@" WHERE (@a IS NULL OR t.Area=@a) AND (@estado IS NULL OR t.Estado=@estado) AND (@gerencia=1 OR
     EXISTS(SELECT 1 FROM dbo.EmpleadoArea ea WHERE ea.idEmpleado=@e AND ea.Area=t.Area AND ea.HastaUtc IS NULL AND ea.DesdeUtc<=SYSUTCDATETIME() AND
      ((t.idEmpleadoAsignado=@e AND EXISTS(SELECT 1 FROM dbo.EmpleadoFuncion f WHERE f.idEmpleadoArea=ea.idEmpleadoArea AND f.HastaUtc IS NULL AND f.DesdeUtc<=SYSUTCDATETIME() AND f.Funcion=CASE WHEN t.Categoria='Ruta' THEN 'LECTURISTA' WHEN t.Area='ADMINISTRACION' THEN 'ATENCION' ELSE 'OPERARIO' END)) OR EXISTS(SELECT 1 FROM dbo.EncargadoArea c WHERE c.idEmpleado=@e AND c.Area=t.Area AND c.HastaUtc IS NULL))))";
@@ -46,6 +46,7 @@ namespace CooperativaAPI.Controllers {
    }
    bool revisionDocumentalPendiente=(string)task["Categoria"]=="Instalacion" && db.Database.SqlQuery<int>("SELECT 1 FROM dbo.SolicitudServicio s JOIN dbo.EstadoSolicitudServicio e ON e.idEstadoSolicitud=s.idEstadoSolicitud WHERE s.idSolicitudServicio=@id AND e.NombreEstado='Pendiente documentacion'",P("@id",(int?)task["OrigenId"])).Any();
    if(revisionDocumentalPendiente){acciones.Clear();if(Jefe((string)task["Area"]))acciones.Add("AprobarDocumentos");}
+   if((string)task["Categoria"]=="Ruta")acciones.Clear();
    object origen=null;
    if(new[]{"Solicitud","Instalacion"}.Contains((string)task["Categoria"])){
     origen=Rows(@"SELECT s.idSolicitudServicio,s.idServicio,se.Nombre Servicio,s.Observaciones,es.NombreEstado Estado FROM dbo.SolicitudServicio s JOIN dbo.Servicio se ON se.idServicio=s.idServicio JOIN dbo.EstadoSolicitudServicio es ON es.idEstadoSolicitud=s.idEstadoSolicitud WHERE s.idSolicitudServicio=@id",P("@id",(int?)task["OrigenId"]));
@@ -53,6 +54,9 @@ namespace CooperativaAPI.Controllers {
    if((string)task["Categoria"]=="Reclamo")origen=Rows("SELECT Descripcion Observaciones FROM dbo.Reclamo WHERE idReclamo=@id",P("@id",(int?)task["OrigenId"]));
    bool puedeRevisarDocumentos=Jefe((string)task["Area"]);
    return new{tarea=Rows(TaskContext+" WHERE t.idTarea=@id",P("@id",id)).Single(),acciones,origen,revisionDocumentalPendiente,puedeRevisarDocumentos,
+    incidenciaMedidor=Rows(@"SELECT i.idIncidencia,i.idMedidor,m.Numero,i.FechaAperturaUtc,i.FechaResolucionUtc,i.TipoResolucion,mo.Nombre Motivo,ev.Detalle
+     FROM dbo.IncidenciaMedidorTarea link JOIN dbo.IncidenciaMedidor i ON i.idIncidencia=link.idIncidencia JOIN dbo.Medidor m ON m.idMedidor=i.idMedidor
+     LEFT JOIN dbo.MotivoMedidor mo ON mo.idMotivo=i.idMotivo LEFT JOIN dbo.EventoMedidor ev ON ev.idEvento=i.idEventoDeteccion WHERE link.idTarea=@id",P("@id",id)).SingleOrDefault(),
     documentosSolicitud=puedeRevisarDocumentos && new[]{"Solicitud","Instalacion"}.Contains((string)task["Categoria"])?Rows("SELECT idDocumentoSolicitud,NombreArchivo,TipoArchivo,FechaSubida FROM dbo.DocumentoSolicitud WHERE idSolicitudServicio=@id",P("@id",(int?)task["OrigenId"])):null,
     documentosLegajo=puedeRevisarDocumentos && new[]{"Solicitud","Instalacion"}.Contains((string)task["Categoria"])?Rows(@"SELECT d.idDocumentoPersona,t.Codigo,t.Nombre Requisito,d.NombreArchivo,d.Estado,d.FechaCargaUtc,
      link.FechaUtc FechaCompartido FROM dbo.SolicitudDocumentoLegajo link JOIN dbo.DocumentoPersona d ON d.idDocumentoPersona=link.idDocumentoPersona
@@ -93,9 +97,25 @@ namespace CooperativaAPI.Controllers {
    return Task(id);
   });}
 
+  [HttpPost,Route("incidencias-medidor/{id:long}/tarea")]
+  public IHttpActionResult CrearTareaIncidenciaMedidor(long id){return Write(()=>{
+   var incidencia=Row("SELECT * FROM dbo.IncidenciaMedidor WITH(UPDLOCK,HOLDLOCK) WHERE idIncidencia=@id",P("@id",id));
+   int medidor=(int)incidencia["idMedidor"];string area=LaboralAccess.AreaMedidor(db,medidor);Exigir(Jefe(area));
+   if(incidencia["idEventoResolucion"].Type!=JTokenType.Null)throw new ArgumentException("La incidencia ya está resuelta.");
+   var existente=Rows(@"SELECT t.idTarea FROM dbo.IncidenciaMedidorTarea link JOIN dbo.TareaLaboral t ON t.idTarea=link.idTarea
+    WHERE link.idIncidencia=@id AND t.Estado NOT IN('Cerrada','Rechazada')",P("@id",id)).SingleOrDefault();
+   if(existente!=null)return new{idTarea=(int)existente["idTarea"],existente=true};
+   var ficha=OperacionesMedidor.Ficha(db,medidor);
+   int tarea=CrearTarea(area,"Trabajo",null,ficha.idSocio,ficha.idServicioSocio,"Atender falla de medidor "+ficha.Numero);
+   db.Database.ExecuteSqlCommand("INSERT dbo.IncidenciaMedidorTarea(idTarea,idIncidencia,idUsuarioSistema) VALUES(@t,@i,@u)",P("@t",tarea),P("@i",id),P("@u",LaboralAccess.Usuario(Principal)));
+   Audit(area,tarea,"CrearTarea",null,"PendienteAsignacion","Trabajo vinculado a una falla de medidor.",new{idIncidencia=id,idMedidor=medidor});
+   return new{idTarea=tarea,existente=false};
+  });}
+
   [HttpPost,Route("tareas/{id:int}/accion")]
   public IHttpActionResult AccionTarea(int id,JObject data){return Write(()=>{
    var t=Task(id);Version(t,data);Exigir(PuedeVer(t));string area=(string)t["Area"],antes=(string)t["Estado"],accion=Texto(data,"Accion",30,true),nuevo=antes,motivo=Texto(data,"Motivo",1000);
+   if((string)t["Categoria"]=="Ruta")throw new ArgumentException("La tarea del recorrido es solo de consulta e historial. Revisá, corregí y aprobá cada medición desde Revisión de lecturas.");
    int? asignado=(int?)t["idEmpleadoAsignado"],idMotivoLaboral=null;
    var solicitudInstalacion=(string)t["Categoria"]=="Instalacion"?db.SolicitudServicio.Find((int?)t["OrigenId"]):null;
    if(solicitudInstalacion!=null && accion!="AprobarDocumentos" && OperacionesMedidor.Normalizar(solicitudInstalacion.EstadoSolicitudServicio.NombreEstado)!="pendiente instalacion")throw new ArgumentException("Primero el encargado debe aprobar la documentacion de la solicitud.");
@@ -133,6 +153,7 @@ namespace CooperativaAPI.Controllers {
      var resultado=Texto(data,"Resultado",2000,true);string datos=data["DatosResultado"]?.Type==JTokenType.Object?data["DatosResultado"].ToString(Newtonsoft.Json.Formatting.None):null;
      if(datos!=null && datos.Length>10000)throw new ArgumentException("El resultado técnico es demasiado extenso.");
      if((string)t["Categoria"]=="Instalacion" && accion=="EnviarRevision" && new[]{"AGUA","ENERGIA"}.Contains(area))ValidarMedidorInstalacion(data["DatosResultado"] as JObject,area);
+     if(accion=="EnviarRevision")ValidarResultadoIncidencia(id,data["DatosResultado"] as JObject);
      db.Database.ExecuteSqlCommand("UPDATE dbo.TareaLaboral SET Resultado=@r,DatosResultado=@d WHERE idTarea=@id",P("@r",resultado),P("@d",datos),P("@id",id));
      if(accion=="EnviarRevision")nuevo="EnRevision";
     }
@@ -140,15 +161,34 @@ namespace CooperativaAPI.Controllers {
     Exigir(Jefe(area));if((accion=="Cerrar" && antes!="Aprobada") || (accion!="Cerrar" && antes!="EnRevision" && !(accion=="Devolver" && antes=="Aprobada")))throw new ArgumentException("La tarea no está en el estado requerido para esta decisión.");
     if(accion=="Rechazar" && (string)t["Categoria"]=="Instalacion")throw new ArgumentException("Una instalacion se devuelve para corregir o reprogramar; no se cancela la solicitud desde esta tarea.");
     if((string)t["Categoria"]=="Instalacion" && new[]{"AGUA","ENERGIA"}.Contains(area) && new[]{"Aprobar","Cerrar"}.Contains(accion))ValidarMedidorInstalacion(string.IsNullOrWhiteSpace((string)t["DatosResultado"])?null:JObject.Parse((string)t["DatosResultado"]),area);
+    if(new[]{"Aprobar","Cerrar"}.Contains(accion))ValidarResultadoIncidencia(id,string.IsNullOrWhiteSpace((string)t["DatosResultado"])?null:JObject.Parse((string)t["DatosResultado"]));
     if(accion=="Rechazar" || accion=="Devolver"){
      var m=Row("SELECT * FROM dbo.MotivoLaboral WHERE idMotivo=@id AND Area=@a AND Accion=@accion AND Activo=1",P("@id",(int?)data["idMotivo"]),P("@a",area),P("@accion",accion));idMotivoLaboral=(int)m["idMotivo"];motivo=(string)m["Nombre"];
     }
     nuevo=accion=="Aprobar"?"Aprobada":accion=="Cerrar"?"Cerrada":accion=="Devolver"?"Observada":"Rechazada";
-    if(accion=="Cerrar" || accion=="Rechazar")AplicarDecision(t,accion,motivo);
+    if(accion=="Aprobar" && (string)t["Categoria"]=="Instalacion"){
+     AplicarDecision(t,"Cerrar",motivo);
+     Audit(area,id,"Aprobar",antes,"Aprobada",motivo,data);
+     accion="Cerrar";antes="Aprobada";nuevo="Cerrada";
+    }
+    else if(accion=="Cerrar" || accion=="Rechazar")AplicarDecision(t,accion,motivo);
    } else throw new ArgumentException("Acción inválida.");
    db.Database.ExecuteSqlCommand("UPDATE dbo.TareaLaboral SET Estado=@estado,FechaActualizacionUtc=SYSUTCDATETIME(),FechaCierreUtc=CASE WHEN @estado IN ('Cerrada','Rechazada') THEN SYSUTCDATETIME() ELSE NULL END WHERE idTarea=@id",P("@estado",nuevo),P("@id",id));
    Audit(area,id,accion,antes,nuevo,motivo,data,idMotivoLaboral);return Task(id);
   });}
+
+  private void ValidarResultadoIncidencia(int tarea,JObject datos){
+   var linked=Rows(@"SELECT i.idMedidor FROM dbo.IncidenciaMedidorTarea l JOIN dbo.IncidenciaMedidor i ON i.idIncidencia=l.idIncidencia WHERE l.idTarea=@t",P("@t",tarea)).SingleOrDefault();
+   if(linked==null){if((string)datos?["TipoTrabajo"]=="RevisionMedidor")throw new ArgumentException("La revisión no corresponde a una tarea de falla.");return;}
+   if(datos==null)throw new ArgumentException("Registrá cómo quedó el medidor: reparado, averiado, pendiente de revisión, retirado o reemplazado.");
+   string tipo=(string)datos["TipoTrabajo"];int id=(int)linked["idMedidor"];
+   if(tipo=="RevisionMedidor"){
+    if((int?)datos["idMedidor"]!=id || !new[]{"Operativo","Averiado","PendienteRevision"}.Contains((string)datos["EstadoFisico"]))throw new ArgumentException("El resultado técnico no corresponde al medidor de la incidencia.");
+    var ficha=OperacionesMedidor.Ficha(db,id);
+    if((string)datos["Version"]!=Convert.ToBase64String(ficha.Version))throw new DBConcurrencyException("El equipo cambió. Actualizá la tarea y confirmá nuevamente su condición.");
+    if((string)datos["EstadoFisico"]=="Operativo" && !ficha.IdentidadVerificada)throw new ArgumentException("Confirmá primero la identidad física del equipo.");
+   }else if(!new[]{"Reemplazo","Retiro"}.Contains(tipo) || (int?)datos["idAnterior"]!=id)throw new ArgumentException("Registrá el resultado del medidor vinculado a esta falla.");
+  }
 
   private void ValidarMedidorInstalacion(JObject datos,string area){
    if(datos==null || datos["TipoTrabajo"]!=null)throw new ArgumentException("Registrá los datos del medidor instalado antes de continuar.");
@@ -220,6 +260,11 @@ namespace CooperativaAPI.Controllers {
       OperacionesMedidor.Ejecutar(db,Principal,id,new OperacionMedidor{Accion="Retirar",Version=op.VersionAnterior,Lectura=op.LecturaFinal,EstadoFisico=op.EstadoRetirado,idMotivo=op.idMotivo,Fecha=op.Fecha,Detalle=op.Detalle},"Reemplazar",operacion);
       OperacionesMedidor.Colocar(db,Principal,op,ficha.idServicioSocio.Value,"Reemplazar",operacion);
      }
+    } else if(tipo=="RevisionMedidor"){
+     ValidarResultadoIncidencia((int)t["idTarea"],datos);
+     var op=datos.ToObject<OperacionMedidor>();op.Accion="Revision";op.Fecha=DateTimeOffset.UtcNow;op.ReferenciaTrabajo="Tarea #"+(int)t["idTarea"];
+     if(string.IsNullOrWhiteSpace(op.Detalle))op.Detalle=(string)t["Resultado"];
+     OperacionesMedidor.Ejecutar(db,Principal,(int)datos["idMedidor"],op);
     } else throw new ArgumentException("El resultado contiene un tipo de trabajo no reconocido.");
    }
   }

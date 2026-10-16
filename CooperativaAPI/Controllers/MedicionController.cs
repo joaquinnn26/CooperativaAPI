@@ -147,74 +147,8 @@ namespace CooperativaAPI.Controllers
         [JwtAuthorize(Roles = "Administrador,Empleado")]
         public IHttpActionResult Crear([FromBody] Medicion medicion)
         {
-            try
-            {
-                if (medicion == null)
-                    return BadRequest("Datos inválidos.");
-
-                if (User.IsInRole("Empleado"))
-                {
-                    var idEmpleadoActual = ObtenerClaimEntero("idEmpleado");
-                    if (!idEmpleadoActual.HasValue) return Unauthorized();
-                    medicion.idEmpleado = idEmpleadoActual.Value;
-                }
-
-                var medidor = db.Medidor.FirstOrDefault(m => m.idMedidor == medicion.idMedidor && m.Activo == true && m.idServicioSocio != null);
-                if (medidor == null)
-                    return BadRequest("El medidor no existe o está inactivo.");
-
-                bool existeEmpleado = db.Empleado.Any(e => e.idEmpleado == medicion.idEmpleado && e.Activo == true);
-                if (!existeEmpleado)
-                    return BadRequest("El empleado no existe o está inactivo.");
-
-                bool existeTipoLectura = db.TipoLectura.Any(t => t.idTipoLectura == medicion.idTipoLectura);
-                if (!existeTipoLectura)
-                    return BadRequest("El tipo de lectura no existe.");
-
-                if (medicion.ValorLectura < 0)
-                    return BadRequest("La lectura no puede ser negativa.");
-
-                var ultimaMedicion = db.Medicion
-                    .Where(m => m.idMedidor == medicion.idMedidor)
-                    .OrderByDescending(m => m.FechaLectura)
-                    .ThenByDescending(m => m.idMedicion)
-                    .FirstOrDefault();
-
-                decimal lecturaAnterior = ultimaMedicion != null ? ultimaMedicion.ValorLectura : 0;
-                var baseInstalacion = db.Database.SqlQuery<decimal?>("SELECT LecturaInicial FROM dbo.AsignacionMedidor WHERE idMedidor=@id AND Cerrada=0", new System.Data.SqlClient.SqlParameter("@id",medicion.idMedidor)).SingleOrDefault();
-                lecturaAnterior = Math.Max(lecturaAnterior,baseInstalacion ?? 0);
-
-                if (medicion.ValorLectura < lecturaAnterior)
-                    return BadRequest("La lectura actual no puede ser menor a la lectura anterior.");
-
-                medicion.idServicioSocio = medidor.idServicioSocio.Value;
-                medicion.ConsumoCalculado = medicion.ValorLectura - lecturaAnterior;
-                medicion.FechaCarga = DateTime.Now;
-
-                if (medicion.FechaLectura == default(DateTime))
-                    medicion.FechaLectura = DateTime.Now;
-
-                if (string.IsNullOrWhiteSpace(medicion.Periodo))
-                    medicion.Periodo = medicion.FechaLectura.ToString("yyyy-MM");
-
-                db.Medicion.Add(medicion);
-                db.SaveChanges();
-
-                return Ok(new
-                {
-                    mensaje = "Medición registrada correctamente.",
-                    idMedicion = medicion.idMedicion,
-                    lecturaAnterior = lecturaAnterior,
-                    lecturaActual = medicion.ValorLectura,
-                    consumoCalculado = medicion.ConsumoCalculado
-                });
-            }
-            catch (Exception ex)
-            {
-                return BadRequest("Error al registrar medición: " + ex.Message);
-            }
+            return BadRequest("Registrá la lectura desde la hoja de ruta con la foto obligatoria del medidor.");
         }
-
         [HttpPut]
         [Route("{id}")]
         [JwtAuthorize(Roles = "Administrador")]

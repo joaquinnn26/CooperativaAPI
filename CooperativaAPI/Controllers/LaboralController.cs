@@ -21,6 +21,7 @@ namespace CooperativaAPI.Controllers {
   private void Exigir(bool condition){if(!condition)throw new UnauthorizedAccessException("No tenés permiso para esta operación o área.");}
   private bool Jefe(string area){return LaboralAccess.Encargado(db,Empleado,area);}
   private bool Funcion(string area,string funcion){return LaboralAccess.Tiene(db,Empleado,area,funcion);}
+  private bool PuedeConsultarTareas(){return Admin || LaboralAccess.Perfil(db,Principal).Any(a=>a.Encargado || a.Funciones.Any(f=>f!="LECTURISTA"));}
   private List<JObject> Rows(string sql,params SqlParameter[] parameters) {
    var connection=(SqlConnection)db.Database.Connection;if(connection.State!=ConnectionState.Open)connection.Open();
    using(var cmd=connection.CreateCommand()){
@@ -128,7 +129,7 @@ namespace CooperativaAPI.Controllers {
 
   [HttpGet,Route("actividad")]
   public IHttpActionResult Actividad(string area=null,int pagina=1){return Read(()=>{
-   if(pagina<1)throw new ArgumentException("Página inválida.");Exigir(!User.IsInRole("Socio"));
+   if(pagina<1)throw new ArgumentException("Página inválida.");Exigir(!User.IsInRole("Socio") && PuedeConsultarTareas());
    bool all=LaboralAccess.Gerencia(db,Principal) || Admin;
    return Rows(@"SELECT h.idAuditoria,h.idTarea,h.Area,h.Accion,h.EstadoAnterior,h.EstadoNuevo,h.Motivo,h.FechaUtc,
     COALESCE(NULLIF(LTRIM(RTRIM(CONCAT(actorPersona.Nombre,' ',actorPersona.Apellido))),''),NULLIF(LTRIM(RTRIM(CONCAT(actorSocioPersona.Nombre,' ',actorSocioPersona.Apellido))),''),NULLIF(u.Usuario,''),N'Responsable no registrado') Responsable

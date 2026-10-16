@@ -35,10 +35,11 @@ namespace CooperativaAPI.Controllers {
    Audit(area,tarea,"Recepcion"+tipo,null,"PendienteAsignacion",canal,new{OrigenId=origen,idSocio=socio,Canal=canal,DocumentosLegajo=tipo=="Solicitud"?(data["DocumentosLegajoCompartidos"] as JArray):null});return new{idTarea=tarea,OrigenId=origen};
   });}
   [HttpGet,Route("tareas/{id:int}/medidores")]
-  public IHttpActionResult MedidoresTarea(int id){return Read(()=>{var t=Task(id);Exigir(PuedeVer(t));return db.Database.SqlQuery<FichaMedidorDto>(OperacionesMedidor.SelectFicha+" WHERE a.idServicioSocio=@c",P("@c",(int?)t["idServicioSocio"])).ToList();});}
+  public IHttpActionResult MedidoresTarea(int id){return Read(()=>{var t=Task(id);Exigir(PuedeVer(t));return db.Database.SqlQuery<FichaMedidorDto>(OperacionesMedidor.SelectFicha+@" WHERE a.idServicioSocio=@c OR m.idMedidor IN
+   (SELECT i.idMedidor FROM dbo.IncidenciaMedidorTarea link JOIN dbo.IncidenciaMedidor i ON i.idIncidencia=link.idIncidencia WHERE link.idTarea=@t)",P("@c",(int?)t["idServicioSocio"]),P("@t",id)).ToList();});}
   [HttpGet,Route("resumen")]
   public IHttpActionResult Resumen(){return Read(()=>{
-   Exigir(Empleado.HasValue);var perfil=LaboralAccess.Perfil(db,Principal);bool gerencia=LaboralAccess.Gerencia(db,Principal);
+   Exigir(Empleado.HasValue && PuedeConsultarTareas());var perfil=LaboralAccess.Perfil(db,Principal);bool gerencia=LaboralAccess.Gerencia(db,Principal);
    var areas=gerencia?Rows("SELECT Codigo Area,Nombre FROM dbo.AreaLaboral"):perfil.Select(a=>new JObject{{"Area",a.Area},{"Nombre",a.Nombre}}).ToList();
    return areas.Select(a=>new{Area=(string)a["Area"],Nombre=(string)a["Nombre"],conteos=Rows(@"SELECT Estado,COUNT(*) Cantidad FROM dbo.TareaLaboral WHERE Area=@a AND (@equipo=1 OR idEmpleadoAsignado=@e) GROUP BY Estado",P("@a",(string)a["Area"]),P("@equipo",gerencia || Jefe((string)a["Area"])),P("@e",Empleado))}).ToList();
   });}
@@ -140,10 +141,50 @@ namespace CooperativaAPI.Controllers {
   });}
 
   [HttpGet,Route("lecturas")]
-  public IHttpActionResult Lecturas(string area,int? conexion=null,int pagina=1){return Read(()=>{
+  public IHttpActionResult Lecturas(string area,int? conexion=null,int pagina=1,string q=null,int? lectura=null,int? ruta=null){return Read(()=>{
    Exigir(Jefe(area) && new[]{"AGUA","ENERGIA"}.Contains(area));if(pagina<1)throw new ArgumentException("Página inválida.");
-   return Rows(@"SELECT m.*,me.Numero NumeroMedidor,CONCAT(p.Nombre,' ',p.Apellido) Socio FROM dbo.Medicion m JOIN dbo.Medidor me ON me.idMedidor=m.idMedidor JOIN dbo.ServicioSocio s ON s.idServicioSocio=m.idServicioSocio JOIN dbo.AreaServicio a ON a.idServicio=s.idServicio JOIN dbo.Socio so ON so.idSocio=s.idSocio JOIN dbo.Persona p ON p.idPersona=so.idPersona
-    WHERE a.Area=@a AND (@c IS NULL OR m.idServicioSocio=@c) ORDER BY m.FechaLectura DESC,m.idMedicion DESC OFFSET @offset ROWS FETCH NEXT 25 ROWS ONLY",P("@a",area),P("@c",conexion),P("@offset",(pagina-1)*25));
+   q=(q??"").Trim();if(q.Length>100)throw new ArgumentException("La búsqueda admite hasta 100 caracteres.");
+   return Rows(@"SELECT m.*,me.Numero NumeroMedidor,CONCAT(p.Nombre,' ',p.Apellido) Socio,
+    CAST(CASE WHEN EXISTS(SELECT 1 FROM dbo.EvidenciaLecturaLaboral f WHERE f.idMedicion=m.idMedicion AND DATALENGTH(f.Contenido)>0) THEN 1 ELSE 0 END AS bit) TieneFoto,
+    CASE WHEN ap.idAprobacion IS NULL THEN 'Pendiente' ELSE 'Aprobada' END EstadoRevision,ap.FechaUtc FechaAprobacion,
+    COALESCE(NULLIF(LTRIM(RTRIM(CONCAT(rp.Nombre,' ',rp.Apellido))),''),ru.Usuario) AprobadaPor
+    FROM dbo.Medicion m JOIN dbo.Medidor me ON me.idMedidor=m.idMedidor JOIN dbo.ServicioSocio s ON s.idServicioSocio=m.idServicioSocio JOIN dbo.AreaServicio a ON a.idServicio=s.idServicio JOIN dbo.Socio so ON so.idSocio=s.idSocio JOIN dbo.Persona p ON p.idPersona=so.idPersona
+    LEFT JOIN dbo.AprobacionLecturaLaboral ap ON ap.idMedicion=m.idMedicion AND ap.VersionLectura=m.VersionRevision
+    LEFT JOIN dbo.UsuarioSistema ru ON ru.idUsuarioSistema=ap.idUsuarioSistema LEFT JOIN dbo.Empleado re ON re.idEmpleado=ru.idEmpleado LEFT JOIN dbo.Persona rp ON rp.idPersona=re.idPersona
+    WHERE a.Area=@a AND (@c IS NULL OR m.idServicioSocio=@c) AND (@lectura IS NULL OR m.idMedicion=@lectura)
+    AND (@ruta IS NULL OR EXISTS(SELECT 1 FROM dbo.RutaMedicionDetalle d WHERE d.idRutaMedicion=@ruta AND d.idMedicion=m.idMedicion))
+    AND (@q='' OR CHARINDEX(@q COLLATE Latin1_General_CI_AI,CONCAT(p.Nombre,' ',p.Apellido,' ',me.Numero,' ',m.idMedicion) COLLATE Latin1_General_CI_AI)>0)
+    ORDER BY m.FechaLectura DESC,m.idMedicion DESC OFFSET @offset ROWS FETCH NEXT 25 ROWS ONLY",P("@a",area),P("@c",conexion),P("@lectura",lectura),P("@ruta",ruta),P("@q",q),P("@offset",(pagina-1)*25));
+  });}
+  [HttpGet,Route("lecturas/{id:int}/foto")]
+  public IHttpActionResult FotoRevisionLectura(int id){
+   var m=db.Medicion.Find(id);if(m==null)return NotFound();string area=LaboralAccess.AreaServicio(db,db.ServicioSocio.Find(m.idServicioSocio).idServicio);
+   if(!Jefe(area))return StatusCode(HttpStatusCode.Forbidden);
+   var file=Rows("SELECT TOP 1 Tipo,Contenido FROM dbo.EvidenciaLecturaLaboral WHERE idMedicion=@id ORDER BY idEvidencia DESC",P("@id",id)).FirstOrDefault();if(file==null)return NotFound();
+   var response=new HttpResponseMessage(HttpStatusCode.OK){Content=new ByteArrayContent((byte[])file["Contenido"])};
+   response.Content.Headers.ContentType=new MediaTypeHeaderValue((string)file["Tipo"]);response.Headers.Add("X-Content-Type-Options","nosniff");response.Headers.CacheControl=new CacheControlHeaderValue{NoStore=true};return ResponseMessage(response);
+  }
+  [HttpPost,Route("lecturas/{id:int}/aprobar")]
+  public IHttpActionResult AprobarLectura(int id,JObject data){return Write(()=>{
+   var actual=Row(@"SELECT m.*,a.Area FROM dbo.Medicion m WITH(UPDLOCK,HOLDLOCK)
+    JOIN dbo.ServicioSocio s ON s.idServicioSocio=m.idServicioSocio JOIN dbo.AreaServicio a ON a.idServicio=s.idServicio WHERE m.idMedicion=@id",P("@id",id));
+   string area=(string)actual["Area"];Exigir(Jefe(area) && new[]{"AGUA","ENERGIA"}.Contains(area));
+   byte[] version;try{version=Convert.FromBase64String((string)data?["VersionRevision"]??"");}catch(FormatException){throw new ArgumentException("Actualizá la lectura antes de aprobar.");}
+   if(!version.SequenceEqual((byte[])actual["VersionRevision"]))throw new DBConcurrencyException("La lectura cambió. Actualizá la consulta y revisá nuevamente antes de aprobar.");
+   if(!Rows("SELECT TOP 1 idEvidencia FROM dbo.EvidenciaLecturaLaboral WHERE idMedicion=@id AND DATALENGTH(Contenido)>0",P("@id",id)).Any())throw new ArgumentException("La lectura no puede aprobarse sin la foto del medidor.");
+   if(Rows("SELECT idAprobacion FROM dbo.AprobacionLecturaLaboral WHERE idMedicion=@id AND VersionLectura=@v",P("@id",id),P("@v",version)).Any())return new{EstadoRevision="Aprobada"};
+   db.Database.ExecuteSqlCommand("INSERT dbo.AprobacionLecturaLaboral(idMedicion,VersionLectura,idUsuarioSistema,ValorLectura,ConsumoCalculado) VALUES(@id,@v,@u,@valor,@consumo)",P("@id",id),P("@v",version),P("@u",LaboralAccess.Usuario(Principal)),P("@valor",(decimal)actual["ValorLectura"]),P("@consumo",(decimal?)actual["ConsumoCalculado"]));
+   Audit(area,null,"AprobarLectura","Pendiente","Aprobada",null,new{idMedicion=id,ValorLectura=(decimal)actual["ValorLectura"],ConsumoCalculado=(decimal?)actual["ConsumoCalculado"]});
+   return new{EstadoRevision="Aprobada"};
+  });}
+  [HttpGet,Route("lecturas/{id:int}/aprobaciones")]
+  public IHttpActionResult AprobacionesLectura(int id){return Read(()=>{
+   var m=db.Medicion.Find(id);if(m==null)throw new ArgumentException("Lectura inexistente.");string area=LaboralAccess.AreaServicio(db,db.ServicioSocio.Find(m.idServicioSocio).idServicio);Exigir(Jefe(area)||LaboralAccess.Gerencia(db,Principal));
+   return Rows(@"SELECT ap.idAprobacion,ap.FechaUtc,ap.ValorLectura,ap.ConsumoCalculado,CAST(CASE WHEN ap.VersionLectura=m.VersionRevision THEN 1 ELSE 0 END AS bit) Vigente,
+    COALESCE(NULLIF(LTRIM(RTRIM(CONCAT(p.Nombre,' ',p.Apellido))),''),u.Usuario,N'Responsable no registrado') Responsable
+    FROM dbo.AprobacionLecturaLaboral ap JOIN dbo.Medicion m ON m.idMedicion=ap.idMedicion JOIN dbo.UsuarioSistema u ON u.idUsuarioSistema=ap.idUsuarioSistema
+    LEFT JOIN dbo.Empleado e ON e.idEmpleado=u.idEmpleado LEFT JOIN dbo.Persona p ON p.idPersona=e.idPersona
+    WHERE ap.idMedicion=@id ORDER BY ap.idAprobacion DESC",P("@id",id));
   });}
   [HttpPost,Route("lecturas/{id:int}/corregir")]
   public IHttpActionResult CorregirLectura(int id,JObject data){return Write(()=>{
