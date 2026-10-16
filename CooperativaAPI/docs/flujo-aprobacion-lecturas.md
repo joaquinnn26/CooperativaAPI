@@ -38,7 +38,7 @@ La exportación contable del período y servicio elegidos se bloquea si alguna l
 - Las hojas abiertas con lecturas ya guardadas sin evidencia permiten adjuntar la foto pendiente sin cambiar el valor. Solo puede hacerlo su lecturista y solo si no existe una foto almacenada.
 - Las hojas cerradas conservan su estado y evidencia histórica. Una lectura histórica sin foto no se puede aprobar; requiere resolver la falta de evidencia mediante un procedimiento autorizado, no inventar una foto ni reabrir automáticamente la hoja.
 - El registro directo antiguo `POST /api/medicion` indica usar la hoja de ruta; así no elude la foto obligatoria.
-- La migración idempotente es `backend-snippets/laboral/20261015_AprobacionLecturas.sql`, para `Cooperativa`.
+- La migración idempotente está en `Data/20261015_AprobacionLecturas.sql`, para `Cooperativa`.
 
 ## Comprobación de esta entrega
 
