@@ -22,12 +22,18 @@ namespace CooperativaAPI.Controllers {
    LEFT JOIN dbo.UbicacionServicio u ON u.idServicioSocio=ss.idServicioSocio";
 
   [HttpGet,Route("tareas")]
-  public IHttpActionResult Tareas(string area=null,string estado=null,int pagina=1){return Read(()=>{
+  public IHttpActionResult Tareas(string area=null,string estado=null,int pagina=1,string q=null,string tipo=null){return Read(()=>{
    Exigir(Empleado.HasValue && PuedeConsultarTareas());if(pagina<1 || pagina>100000)throw new ArgumentException("Página inválida.");
+   q=(q??"").Trim();if(q.Length>100)throw new ArgumentException("La búsqueda admite hasta 100 caracteres.");
+   if(tipo!=null && !new[]{"Operativas","Recorridos"}.Contains(tipo))throw new ArgumentException("Tipo de consulta inválido.");
    var scope=@" WHERE (@a IS NULL OR t.Area=@a) AND (@estado IS NULL OR t.Estado=@estado) AND (@gerencia=1 OR
     EXISTS(SELECT 1 FROM dbo.EmpleadoArea ea WHERE ea.idEmpleado=@e AND ea.Area=t.Area AND ea.HastaUtc IS NULL AND ea.DesdeUtc<=SYSUTCDATETIME() AND
      ((t.idEmpleadoAsignado=@e AND EXISTS(SELECT 1 FROM dbo.EmpleadoFuncion f WHERE f.idEmpleadoArea=ea.idEmpleadoArea AND f.HastaUtc IS NULL AND f.DesdeUtc<=SYSUTCDATETIME() AND f.Funcion=CASE WHEN t.Categoria='Ruta' THEN 'LECTURISTA' WHEN t.Area='ADMINISTRACION' THEN 'ATENCION' ELSE 'OPERARIO' END)) OR EXISTS(SELECT 1 FROM dbo.EncargadoArea c WHERE c.idEmpleado=@e AND c.Area=t.Area AND c.HastaUtc IS NULL))))";
-   Func<System.Data.SqlClient.SqlParameter[]> args=()=>new[]{P("@a",area),P("@estado",estado),P("@gerencia",LaboralAccess.Gerencia(db,Principal)),P("@e",Empleado),P("@offset",(pagina-1)*25)};
+   scope+=@" AND (@tipo IS NULL OR (@tipo='Recorridos' AND t.Categoria='Ruta') OR (@tipo='Operativas' AND t.Categoria<>'Ruta'))
+    AND (@q='' OR CHARINDEX(@q COLLATE Latin1_General_CI_AI,CONCAT(t.Titulo,' ',t.idTarea) COLLATE Latin1_General_CI_AI)>0
+     OR EXISTS(SELECT 1 FROM dbo.Socio s JOIN dbo.Persona p ON p.idPersona=s.idPersona WHERE s.idSocio=t.idSocio AND CHARINDEX(@q COLLATE Latin1_General_CI_AI,CONCAT(p.Nombre,' ',p.Apellido) COLLATE Latin1_General_CI_AI)>0)
+     OR EXISTS(SELECT 1 FROM dbo.Empleado e JOIN dbo.Persona p ON p.idPersona=e.idPersona WHERE e.idEmpleado=t.idEmpleadoAsignado AND CHARINDEX(@q COLLATE Latin1_General_CI_AI,CONCAT(p.Nombre,' ',p.Apellido) COLLATE Latin1_General_CI_AI)>0))";
+   Func<System.Data.SqlClient.SqlParameter[]> args=()=>new[]{P("@a",area),P("@estado",estado),P("@gerencia",LaboralAccess.Gerencia(db,Principal)),P("@e",Empleado),P("@q",q),P("@tipo",tipo),P("@offset",(pagina-1)*25)};
    return new{items=Rows(TaskContext+scope+" ORDER BY t.FechaActualizacionUtc DESC,t.idTarea DESC OFFSET @offset ROWS FETCH NEXT 25 ROWS ONLY",args()),total=db.Database.SqlQuery<int>("SELECT COUNT(*) FROM dbo.TareaLaboral t"+scope,args()).Single()};
   });}
   [HttpGet,Route("tareas/{id:int}")]

@@ -119,7 +119,7 @@ namespace CooperativaAPI.Controllers {
    Exigir(Jefe(area) || LaboralAccess.Gerencia(db,Principal));
     return Rows(@"SELECT e.idEmpleado,CONCAT(p.Nombre,' ',p.Apellido) Nombre,c.NombreCargo Cargo,a.DesdeUtc,
       STUFF((SELECT ', '+f.Funcion FROM dbo.EmpleadoFuncion f WHERE f.idEmpleadoArea=a.idEmpleadoArea AND f.HastaUtc IS NULL AND f.DesdeUtc<=SYSUTCDATETIME() FOR XML PATH(''),TYPE).value('.','nvarchar(max)'),1,2,'') Funciones,
-    (SELECT COUNT(*) FROM dbo.TareaLaboral t WHERE t.Area=a.Area AND t.idEmpleadoAsignado=e.idEmpleado AND t.Estado NOT IN ('Cerrada','Rechazada')) Pendientes
+    (SELECT COUNT(*) FROM dbo.TareaLaboral t WHERE t.Area=a.Area AND t.idEmpleadoAsignado=e.idEmpleado AND t.Categoria<>'Ruta' AND t.Estado NOT IN ('Cerrada','Rechazada')) Pendientes
     FROM dbo.EmpleadoArea a JOIN dbo.Empleado e ON e.idEmpleado=a.idEmpleado JOIN dbo.Persona p ON p.idPersona=e.idPersona JOIN dbo.Cargo c ON c.idCargo=e.idCargo
     WHERE a.Area=@a AND a.HastaUtc IS NULL AND e.Activo=1",P("@a",area));
   });}
