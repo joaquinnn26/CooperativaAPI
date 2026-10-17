@@ -92,13 +92,16 @@ namespace CooperativaAPI.Controllers {
   public IHttpActionResult Facturas(int pagina=1,string area=null){return Read(()=>{
    if(pagina<1 || pagina>100000)throw new ArgumentException("Página inválida.");
    bool personal=User.IsInRole("Socio");int? socio=personal?int.Parse(Principal.FindFirst("idSocio").Value):(int?)null;
-   bool adminFact=Funcion("ADMINISTRACION","FACTURACION") || Jefe("ADMINISTRACION");
+   bool adminFact=Admin || Funcion("ADMINISTRACION","FACTURACION") || Jefe("ADMINISTRACION");
    bool internetFact=Funcion("INTERNET","FACTURACION");
    Exigir(personal || adminFact || internetFact);
    var where=" WHERE f.Activo=1 AND (@s IS NULL OR f.idSocio=@s) AND (@all=1 OR a.Area='INTERNET') AND (@area IS NULL OR a.Area=@area)";
    var from=" FROM dbo.Factura f JOIN dbo.Servicio se ON se.idServicio=f.idServicio LEFT JOIN dbo.AreaServicio a ON a.idServicio=f.idServicio LEFT JOIN dbo.ConfirmacionFactura c ON c.idFactura=f.idFactura";
    Func<System.Data.SqlClient.SqlParameter[]> args=()=>new[]{P("@s",socio),P("@all",personal || adminFact),P("@area",area),P("@offset",(pagina-1)*25)};
-   return new{items=Rows(@"SELECT f.idFactura,f.idSocio,se.Nombre Servicio,f.MontoTotal,f.FechaEmision,f.FechaCaducidad,f.LinkPago,c.Estado EstadoConfirmado,c.FechaActualizacionUtc,c.Fuente,c.Referencia"+from+where+" ORDER BY f.FechaEmision DESC,f.idFactura DESC OFFSET @offset ROWS FETCH NEXT 25 ROWS ONLY",args()),total=db.Database.SqlQuery<int>("SELECT COUNT(*)"+from+where,args()).Single(),integracionPendiente=true};
+   var items=Rows(@"SELECT f.idFactura,f.idSocio,se.Nombre Servicio,f.MontoTotal,f.FechaEmision,f.FechaCaducidad,f.LinkPago,c.Estado EstadoConfirmado,c.FechaActualizacionUtc,c.Fuente,c.Referencia"+from+where+" ORDER BY f.FechaEmision DESC,f.idFactura DESC OFFSET @offset ROWS FETCH NEXT 25 ROWS ONLY",args());
+   bool conceptos=db.Database.SqlQuery<int>("SELECT CASE WHEN OBJECT_ID('dbo.FacturaConcepto','U') IS NULL THEN 0 ELSE 1 END").Single()==1;
+   foreach(var item in items) item["Conceptos"]=conceptos?JArray.FromObject(Rows("SELECT Tipo,Descripcion,Importe FROM dbo.FacturaConcepto WHERE idFactura=@f ORDER BY idConcepto",P("@f",(int)item["idFactura"]))):new JArray();
+   return new{items,total=db.Database.SqlQuery<int>("SELECT COUNT(*)"+from+where,args()).Single(),integracionPendiente=true};
   });}
 
   [HttpGet,Route("lecturas")]

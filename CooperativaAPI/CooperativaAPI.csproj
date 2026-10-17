@@ -522,7 +522,8 @@
   <ItemGroup><Compile Include="Controllers\LaboralConsultas.cs" /></ItemGroup>
   <ItemGroup><Compile Include="Controllers\LaboralController.cs" /></ItemGroup>
   <ItemGroup><Compile Include="Controllers\LaboralTareas.cs" /></ItemGroup>
-  <ItemGroup><Compile Include="Controllers\SocioAltaController.cs" /></ItemGroup>
+  <ItemGroup><Compile Include="Controllers\SocioAltaController.cs" /><Compile Include="Controllers\AdhesionesController.cs" /><Compile Include="Data\AdhesionesBeneficios.cs" /><Compile Include="Data\ConceptosBeneficios.cs" /></ItemGroup>
+  <ItemGroup><Content Include="Data\20261016_AdhesionesBeneficios.sql" /></ItemGroup>
   <ItemGroup><Compile Include="Controllers\EventosOperativosController.cs" /></ItemGroup>
   <ItemGroup><Content Include="Data\20260930_AltaSocioRevision.sql" /></ItemGroup>
   <ItemGroup><Content Include="Data\20260930_UnificarDocumentosCaducidadRutas.sql" /></ItemGroup>
