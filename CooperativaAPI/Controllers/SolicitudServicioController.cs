@@ -112,15 +112,25 @@ namespace CooperativaAPI.Controllers
             }
         }
 
+        public class AltaServicioRequest
+        {
+            public int idServicio { get; set; }
+            public string Observaciones { get; set; }
+            public Newtonsoft.Json.Linq.JObject Adhesiones { get; set; }
+        }
         [HttpPost]
         [Route("")]
         [JwtAuthorize(Roles = "Socio")]
-        public IHttpActionResult Crear([FromBody] SolicitudServicio solicitud)
+        public IHttpActionResult Crear([FromBody] AltaServicioRequest data)
         {
+            using (var tx = db.Database.BeginTransaction(System.Data.IsolationLevel.Serializable))
+            {
             try
             {
-                if (solicitud == null)
+                if (data == null)
                     return BadRequest("Datos inválidos.");
+
+                var solicitud = new SolicitudServicio { idServicio=data.idServicio, Observaciones=data.Observaciones };
 
                 var idSocioActual = ObtenerClaimEntero("idSocio");
                 if (!idSocioActual.HasValue) return Unauthorized();
@@ -131,6 +141,9 @@ namespace CooperativaAPI.Controllers
 
                 if (!db.Servicio.Any(s => s.idServicio == solicitud.idServicio))
                     return BadRequest("El servicio no existe.");
+                var nombreServicio = db.Servicio.Find(solicitud.idServicio).Nombre.Trim().ToUpperInvariant();
+                if (nombreServicio == "SEPELIO" || nombreServicio == "ORTOPEDIA")
+                    return BadRequest("Gestioná la adhesión desde Sepelio y Ortopedia o junto con el alta de Energía.");
 
                 var solicitudActiva = db.SolicitudServicio.Any(s =>
                     s.idSocio == solicitud.idSocio &&
@@ -139,8 +152,6 @@ namespace CooperativaAPI.Controllers
                 if (solicitudActiva)
                     return BadRequest("Ya existe una solicitud activa para este servicio.");
 
-                using (var tx = db.Database.BeginTransaction())
-                {
                 solicitud.FechaSolicitud = DateTime.Now;
 
                 var areaServicio = LaboralAccess.AreaServicio(db, solicitud.idServicio);
@@ -178,6 +189,8 @@ namespace CooperativaAPI.Controllers
                     EstadoNuevo = estadoEnRevision.NombreEstado, Detalle = "Solicitud recibida por el sistema.",
                     ClaveIdempotencia = "SolicitudServicioCreada:" + solicitud.idSolicitudServicio
                 });
+                if (data.Adhesiones != null)
+                    AdhesionesBeneficios.Crear(db,solicitud.idSocio,ObtenerClaimEntero("idUsuarioSistema").Value,solicitud.idSolicitudServicio,null,data.Adhesiones);
                 tx.Commit();
 
                 return Ok(new
@@ -185,11 +198,11 @@ namespace CooperativaAPI.Controllers
                     mensaje = "Solicitud creada correctamente.",
                     solicitud.idSolicitudServicio
                 });
-                }
             }
             catch (Exception ex)
             {
                 return BadRequest(ex.Message);
+            }
             }
         }
 

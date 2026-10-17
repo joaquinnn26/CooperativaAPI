@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Linq;
@@ -137,7 +137,10 @@ namespace CooperativaAPI.Controllers {
    var where=" WHERE f.Activo=1 AND (@s IS NULL OR f.idSocio=@s) AND (@all=1 OR a.Area='INTERNET') AND (@area IS NULL OR a.Area=@area)";
    var from=" FROM dbo.Factura f JOIN dbo.Servicio se ON se.idServicio=f.idServicio LEFT JOIN dbo.AreaServicio a ON a.idServicio=f.idServicio LEFT JOIN dbo.ConfirmacionFactura c ON c.idFactura=f.idFactura LEFT JOIN dbo.LoteFacturacionInternetDetalle fi ON fi.idFactura=f.idFactura LEFT JOIN dbo.LoteFacturacionInternet lfi ON lfi.idLote=fi.idLote";
    Func<System.Data.SqlClient.SqlParameter[]> args=()=>new[]{P("@s",socio),P("@all",personal || adminFact),P("@area",area),P("@offset",(pagina-1)*25)};
-   return new{items=Rows(@"SELECT f.idFactura,f.idSocio,se.Nombre Servicio,f.MontoTotal,f.FechaEmision,f.FechaCaducidad,f.LinkPago,c.Estado EstadoConfirmado,c.FechaActualizacionUtc,c.Fuente,c.Referencia,fi.NumeroFactura,lfi.Periodo,fi.ReferenciaFacturaExterna"+from+where+" ORDER BY f.FechaEmision DESC,f.idFactura DESC OFFSET @offset ROWS FETCH NEXT 25 ROWS ONLY",args()),total=db.Database.SqlQuery<int>("SELECT COUNT(*)"+from+where,args()).Single(),integracionPendiente=false};
+   var items=Rows(@"SELECT f.idFactura,f.idSocio,se.Nombre Servicio,f.MontoTotal,f.FechaEmision,f.FechaCaducidad,f.LinkPago,c.Estado EstadoConfirmado,c.FechaActualizacionUtc,c.Fuente,c.Referencia,fi.NumeroFactura,lfi.Periodo,fi.ReferenciaFacturaExterna"+from+where+" ORDER BY f.FechaEmision DESC,f.idFactura DESC OFFSET @offset ROWS FETCH NEXT 25 ROWS ONLY",args());
+   bool conceptos=db.Database.SqlQuery<int>("SELECT CASE WHEN OBJECT_ID('dbo.FacturaConcepto','U') IS NULL THEN 0 ELSE 1 END").Single()==1;
+   foreach(var item in items) item["Conceptos"]=conceptos?JArray.FromObject(Rows("SELECT Tipo,Descripcion,Importe FROM dbo.FacturaConcepto WHERE idFactura=@f ORDER BY idConcepto",P("@f",(int)item["idFactura"]))):new JArray();
+   return new{items,total=db.Database.SqlQuery<int>("SELECT COUNT(*)"+from+where,args()).Single(),integracionPendiente=false};
   });}
 
   [HttpGet,Route("lecturas")]
