@@ -27,6 +27,7 @@ namespace CooperativaAPI
             throw new UnintentionalCodeFirstException();
         }
     
+        public virtual DbSet<Aviso> Aviso { get; set; }
         public virtual DbSet<C__MigrationHistory> C__MigrationHistory { get; set; }
         public virtual DbSet<Cargo> Cargo { get; set; }
         public virtual DbSet<Empleado> Empleado { get; set; }

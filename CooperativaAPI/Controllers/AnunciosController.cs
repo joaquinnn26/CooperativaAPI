@@ -1,6 +1,8 @@
 using System;
 using System.Data.Entity;
 using System.Linq;
+using System.Net;
+using System.Security.Claims;
 using System.Web.Http;
 using CooperativaAPI.Data;
 using CooperativaAPI.Filters;
@@ -33,9 +35,9 @@ namespace CooperativaAPI.Controllers
 
                 return Ok(anuncios);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                return BadRequest("Error al obtener anuncios: " + ex.GetBaseException().Message);
+                return Content(HttpStatusCode.InternalServerError, "No se pudieron obtener los anuncios. Intentá nuevamente.");
             }
         }
 
@@ -55,9 +57,9 @@ namespace CooperativaAPI.Controllers
 
                 return Ok(anuncios);
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                return BadRequest("Error al obtener anuncios: " + ex.GetBaseException().Message);
+                return Content(HttpStatusCode.InternalServerError, "No se pudieron obtener los anuncios. Intentá nuevamente.");
             }
         }
 
@@ -70,6 +72,11 @@ namespace CooperativaAPI.Controllers
             {
                 var error = Validar(request);
                 if (!string.IsNullOrWhiteSpace(error)) return BadRequest(error);
+
+                var idEmpleadoAutor = ObtenerEmpleadoAutor();
+                if (!idEmpleadoAutor.HasValue)
+                    return Content(HttpStatusCode.Conflict,
+                        "La cuenta administradora no tiene un empleado activo asociado. No se creó el anuncio. Contactá a la cooperativa.");
 
                 var prioridad = BuscarPrioridad(request.Prioridad);
                 if (prioridad == null) return BadRequest("La prioridad seleccionada no existe o esta inactiva.");
@@ -85,7 +92,7 @@ namespace CooperativaAPI.Controllers
                     FechaFin = request.FechaFin,
                     Activo = request.Activo,
                     Fijo = request.Fijo,
-                    idEmpleado = request.idEmpleado
+                    idEmpleado = idEmpleadoAutor.Value
                 };
 
                 db.Anuncios.Add(anuncio);
@@ -93,9 +100,9 @@ namespace CooperativaAPI.Controllers
 
                 return Ok(MapAnuncio(anuncio));
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                return BadRequest("Error al crear anuncio: " + ex.GetBaseException().Message);
+                return Content(HttpStatusCode.InternalServerError, "No se pudo crear el anuncio. Comprobá el listado antes de reintentar.");
             }
         }
 
@@ -123,14 +130,13 @@ namespace CooperativaAPI.Controllers
                 anuncio.FechaFin = request.FechaFin;
                 anuncio.Activo = request.Activo;
                 anuncio.Fijo = request.Fijo;
-                anuncio.idEmpleado = request.idEmpleado;
 
                 db.SaveChanges();
                 return Ok(MapAnuncio(anuncio));
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                return BadRequest("Error al actualizar anuncio: " + ex.GetBaseException().Message);
+                return Content(HttpStatusCode.InternalServerError, "No se pudo actualizar el anuncio. Comprobá el listado antes de reintentar.");
             }
         }
 
@@ -149,9 +155,9 @@ namespace CooperativaAPI.Controllers
 
                 return Ok(MapAnuncio(anuncio));
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                return BadRequest("Error al desactivar anuncio: " + ex.GetBaseException().Message);
+                return Content(HttpStatusCode.InternalServerError, "No se pudo desactivar el anuncio. Comprobá el listado antes de reintentar.");
             }
         }
 
@@ -170,6 +176,14 @@ namespace CooperativaAPI.Controllers
                 anuncio.Fijo,
                 anuncio.idEmpleado
             };
+        }
+
+        private int? ObtenerEmpleadoAutor()
+        {
+            using (var cuentas = new CooperativaEntities())
+            {
+                return LaboralAccess.Empleado(cuentas, User as ClaimsPrincipal);
+            }
         }
 
         private static string Validar(AnuncioRequest request)
