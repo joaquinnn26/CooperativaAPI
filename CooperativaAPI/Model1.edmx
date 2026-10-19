@@ -5,6 +5,32 @@
     <!-- SSDL content -->
     <edmx:StorageModels>
     <Schema Namespace="CooperativaModel.Store" Provider="System.Data.SqlClient" ProviderManifestToken="2012" Alias="Self" xmlns:store="http://schemas.microsoft.com/ado/2007/12/edm/EntityStoreSchemaGenerator" xmlns:customannotation="http://schemas.microsoft.com/ado/2013/11/edm/customannotation" xmlns="http://schemas.microsoft.com/ado/2009/11/edm/ssdl">
+        <EntityType Name="Aviso">
+          <Key><PropertyRef Name="idAviso" /></Key>
+          <Property Name="idAviso" Type="bigint" Nullable="false" StoreGeneratedPattern="Identity" />
+          <Property Name="idUsuarioSistema" Type="int" Nullable="false" />
+          <Property Name="Ambito" Type="nvarchar" Nullable="false" MaxLength="10" />
+          <Property Name="TipoAviso" Type="nvarchar" Nullable="false" MaxLength="80" />
+          <Property Name="Titulo" Type="nvarchar" Nullable="false" MaxLength="120" />
+          <Property Name="Mensaje" Type="nvarchar" Nullable="false" MaxLength="1000" />
+          <Property Name="Prioridad" Type="tinyint" Nullable="false" />
+          <Property Name="TipoOrigen" Type="nvarchar" Nullable="false" MaxLength="60" />
+          <Property Name="idOrigen" Type="nvarchar" Nullable="false" MaxLength="80" />
+          <Property Name="ClaveEvento" Type="nvarchar" Nullable="false" MaxLength="256" />
+          <Property Name="FechaCreacionUtc" Type="datetime2" Nullable="false" Precision="3" />
+          <Property Name="FechaLecturaUtc" Type="datetime2" Nullable="true" Precision="3" />
+          <Property Name="FechaArchivoUtc" Type="datetime2" Nullable="true" Precision="3" />
+          <Property Name="RequiereAccion" Type="bit" Nullable="false" />
+          <Property Name="idEventoOperativo" Type="bigint" Nullable="true" />
+        </EntityType>
+        <Association Name="FK_Aviso_UsuarioSistema">
+          <End Role="UsuarioSistema" Type="Self.UsuarioSistema" Multiplicity="1" />
+          <End Role="Aviso" Type="Self.Aviso" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="UsuarioSistema"><PropertyRef Name="idUsuarioSistema" /></Principal>
+            <Dependent Role="Aviso"><PropertyRef Name="idUsuarioSistema" /></Dependent>
+          </ReferentialConstraint>
+        </Association>
         <EntityType Name="__MigrationHistory">
           <Key>
             <PropertyRef Name="MigrationId" />
@@ -815,6 +841,11 @@
         </Function>
         <Function Name="sp_upgraddiagrams" Aggregate="false" BuiltIn="false" NiladicFunction="false" IsComposable="false" ParameterTypeSemantics="AllowImplicitConversion" Schema="dbo" />
         <EntityContainer Name="CooperativaModelStoreContainer">
+          <EntitySet Name="Aviso" EntityType="Self.Aviso" Schema="dbo" store:Type="Tables" />
+          <AssociationSet Name="FK_Aviso_UsuarioSistema" Association="Self.FK_Aviso_UsuarioSistema">
+            <End Role="UsuarioSistema" EntitySet="UsuarioSistema" />
+            <End Role="Aviso" EntitySet="Aviso" />
+          </AssociationSet>
           <EntitySet Name="__MigrationHistory" EntityType="Self.__MigrationHistory" Schema="dbo" store:Type="Tables" />
           <EntitySet Name="Cargo" EntityType="Self.Cargo" Schema="dbo" store:Type="Tables" />
           <EntitySet Name="DocumentoSolicitud" EntityType="Self.DocumentoSolicitud" Schema="dbo" store:Type="Tables" />
@@ -1004,6 +1035,33 @@
     <!-- CSDL content -->
     <edmx:ConceptualModels>
       <Schema Namespace="CooperativaModel" Alias="Self" annotation:UseStrongSpatialTypes="false" xmlns:annotation="http://schemas.microsoft.com/ado/2009/02/edm/annotation" xmlns:customannotation="http://schemas.microsoft.com/ado/2013/11/edm/customannotation" xmlns="http://schemas.microsoft.com/ado/2009/11/edm">
+        <EntityType Name="Aviso">
+          <Key><PropertyRef Name="idAviso" /></Key>
+          <Property Name="idAviso" Type="Int64" Nullable="false" annotation:StoreGeneratedPattern="Identity" />
+          <Property Name="idUsuarioSistema" Type="Int32" Nullable="false" />
+          <Property Name="Ambito" Type="String" Nullable="false" MaxLength="10" FixedLength="false" Unicode="true" />
+          <Property Name="TipoAviso" Type="String" Nullable="false" MaxLength="80" FixedLength="false" Unicode="true" />
+          <Property Name="Titulo" Type="String" Nullable="false" MaxLength="120" FixedLength="false" Unicode="true" />
+          <Property Name="Mensaje" Type="String" Nullable="false" MaxLength="1000" FixedLength="false" Unicode="true" />
+          <Property Name="Prioridad" Type="Byte" Nullable="false" DefaultValue="2" />
+          <Property Name="TipoOrigen" Type="String" Nullable="false" MaxLength="60" FixedLength="false" Unicode="true" />
+          <Property Name="idOrigen" Type="String" Nullable="false" MaxLength="80" FixedLength="false" Unicode="true" />
+          <Property Name="ClaveEvento" Type="String" Nullable="false" MaxLength="256" FixedLength="false" Unicode="true" />
+          <Property Name="FechaCreacionUtc" Type="DateTime" Nullable="false" Precision="3" />
+          <Property Name="FechaLecturaUtc" Type="DateTime" Nullable="true" Precision="3" />
+          <Property Name="FechaArchivoUtc" Type="DateTime" Nullable="true" Precision="3" />
+          <Property Name="RequiereAccion" Type="Boolean" Nullable="false" DefaultValue="false" />
+          <Property Name="idEventoOperativo" Type="Int64" Nullable="true" />
+          <NavigationProperty Name="UsuarioSistema" Relationship="CooperativaModel.FK_Aviso_UsuarioSistema" FromRole="Aviso" ToRole="UsuarioSistema" />
+        </EntityType>
+        <Association Name="FK_Aviso_UsuarioSistema">
+          <End Role="UsuarioSistema" Type="CooperativaModel.UsuarioSistema" Multiplicity="1" />
+          <End Role="Aviso" Type="CooperativaModel.Aviso" Multiplicity="*" />
+          <ReferentialConstraint>
+            <Principal Role="UsuarioSistema"><PropertyRef Name="idUsuarioSistema" /></Principal>
+            <Dependent Role="Aviso"><PropertyRef Name="idUsuarioSistema" /></Dependent>
+          </ReferentialConstraint>
+        </Association>
         <EntityType Name="C__MigrationHistory">
           <Key>
             <PropertyRef Name="MigrationId" />
@@ -1298,6 +1356,11 @@
           </ReferentialConstraint>
         </Association>
         <EntityContainer Name="CooperativaEntities" annotation:LazyLoadingEnabled="true">
+          <EntitySet Name="Aviso" EntityType="CooperativaModel.Aviso" />
+          <AssociationSet Name="FK_Aviso_UsuarioSistema" Association="CooperativaModel.FK_Aviso_UsuarioSistema">
+            <End Role="UsuarioSistema" EntitySet="UsuarioSistema" />
+            <End Role="Aviso" EntitySet="Aviso" />
+          </AssociationSet>
           <EntitySet Name="C__MigrationHistory" EntityType="Self.C__MigrationHistory" />
           <EntitySet Name="Cargo" EntityType="Self.Cargo" />
           <EntitySet Name="Empleado" EntityType="Self.Empleado" />
@@ -2057,6 +2120,27 @@
     <edmx:Mappings>
       <Mapping Space="C-S" xmlns="http://schemas.microsoft.com/ado/2009/11/mapping/cs">
         <EntityContainerMapping StorageEntityContainer="CooperativaModelStoreContainer" CdmEntityContainer="CooperativaEntities">
+          <EntitySetMapping Name="Aviso">
+            <EntityTypeMapping TypeName="CooperativaModel.Aviso">
+              <MappingFragment StoreEntitySet="Aviso">
+                <ScalarProperty Name="idAviso" ColumnName="idAviso" />
+                <ScalarProperty Name="idUsuarioSistema" ColumnName="idUsuarioSistema" />
+                <ScalarProperty Name="Ambito" ColumnName="Ambito" />
+                <ScalarProperty Name="TipoAviso" ColumnName="TipoAviso" />
+                <ScalarProperty Name="Titulo" ColumnName="Titulo" />
+                <ScalarProperty Name="Mensaje" ColumnName="Mensaje" />
+                <ScalarProperty Name="Prioridad" ColumnName="Prioridad" />
+                <ScalarProperty Name="TipoOrigen" ColumnName="TipoOrigen" />
+                <ScalarProperty Name="idOrigen" ColumnName="idOrigen" />
+                <ScalarProperty Name="ClaveEvento" ColumnName="ClaveEvento" />
+                <ScalarProperty Name="FechaCreacionUtc" ColumnName="FechaCreacionUtc" />
+                <ScalarProperty Name="FechaLecturaUtc" ColumnName="FechaLecturaUtc" />
+                <ScalarProperty Name="FechaArchivoUtc" ColumnName="FechaArchivoUtc" />
+                <ScalarProperty Name="RequiereAccion" ColumnName="RequiereAccion" />
+                <ScalarProperty Name="idEventoOperativo" ColumnName="idEventoOperativo" />
+              </MappingFragment>
+            </EntityTypeMapping>
+          </EntitySetMapping>
           <EntitySetMapping Name="C__MigrationHistory">
             <EntityTypeMapping TypeName="CooperativaModel.C__MigrationHistory">
               <MappingFragment StoreEntitySet="__MigrationHistory">

@@ -196,6 +196,9 @@
     <Compile Include="Areas\HelpPage\SampleGeneration\SampleDirection.cs" />
     <Compile Include="Areas\HelpPage\SampleGeneration\TextSample.cs" />
     <Compile Include="Areas\HelpPage\XmlDocumentationProvider.cs" />
+    <Compile Include="Aviso.cs">
+      <DependentUpon>Model1.tt</DependentUpon>
+    </Compile>
     <Compile Include="Cargo.cs">
       <DependentUpon>Model1.tt</DependentUpon>
     </Compile>
@@ -203,6 +206,8 @@
     <Compile Include="PrioridadAnuncio.cs" />
     <Compile Include="Controllers\AdminDashboardController.cs" />
     <Compile Include="Controllers\AnunciosController.cs" />
+    <Compile Include="Controllers\AvisosController.cs" />
+    <Compile Include="Services\AvisosService.cs" />
     <Compile Include="Controllers\AuthController.cs" />
     <Compile Include="Controllers\CargoController.cs" />
     <Compile Include="Controllers\DocumentoSolicitudController.cs" />
@@ -255,6 +260,8 @@
     </Compile>
     <Compile Include="Helpers\JwtHelper.cs" />
     <Compile Include="Helpers\PasswordHelpers.cs" />
+    <Compile Include="Helpers\RecoverySmtpSettings.cs" />
+    <Compile Include="Helpers\RecoveryMailService.cs" />
     <Compile Include="HistorialEstadoSolicitud.cs">
       <DependentUpon>Model1.tt</DependentUpon>
     </Compile>

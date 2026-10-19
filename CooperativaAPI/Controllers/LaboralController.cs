@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.SqlClient;
@@ -59,7 +59,7 @@ namespace CooperativaAPI.Controllers {
    encargados=Rows("SELECT * FROM dbo.EncargadoArea ORDER BY idEncargadoArea DESC"),
    servicios=Rows("SELECT s.idServicio,s.Nombre,a.Area FROM dbo.Servicio s LEFT JOIN dbo.AreaServicio a ON a.idServicio=s.idServicio"),
    motivos=Rows("SELECT * FROM dbo.MotivoLaboral ORDER BY Area,Accion,Nombre"),
-   tiposDocumento=Rows("SELECT idTipoDocumentoPersona,idTipoDocumentoPersona idTipoDocumento,Codigo,Nombre,Grupo,Activo FROM dbo.TipoDocumentoPersona ORDER BY Nombre"),
+   tiposDocumento=Rows("SELECT idTipoDocumentoPersona,idTipoDocumentoPersona AS idTipoDocumento,Codigo,Nombre,Grupo,Activo FROM dbo.TipoDocumentoPersona ORDER BY Nombre"),
    cuentas=Rows("SELECT u.idUsuarioSistema,u.idEmpleado,u.Usuario FROM dbo.UsuarioSistema u JOIN dbo.Rol r ON r.idRol=u.idRol WHERE r.NombreRol='Empleado'")
   };});}
 
@@ -75,13 +75,24 @@ namespace CooperativaAPI.Controllers {
     db.UsuarioSistema.Add(new UsuarioSistema{Usuario="laboral-"+id,idEmpleado=id,idSocio=null,idRol=rol,Contrasenia=CooperativaAPI.Helpers.PasswordHelpers.Hashear(password)});
     data.Remove("Password");
    } else if(accion=="DocumentoTipo"){
-    var nombre=Texto(data,"Nombre",120,true);int? id=(int?)data["idTipoDocumentoPersona"]??(int?)data["idTipoDocumento"];
+    // El alias del GET identifica tipos del catalogo unificado, no IDs historicos.
+    int? id=(int?)data["idTipoDocumentoPersona"],idCompatible=(int?)data["idTipoDocumento"];
+    if(id.HasValue && idCompatible.HasValue && id!=idCompatible)throw new ArgumentException("Los identificadores del tipo de documento no coinciden.");
+    id=id??idCompatible;
     if(id.HasValue){
-     Row("SELECT idTipoDocumentoPersona FROM dbo.TipoDocumentoPersona WHERE idTipoDocumentoPersona=@id",P("@id",id));
-     db.Database.ExecuteSqlCommand("UPDATE dbo.TipoDocumentoPersona SET Activo=@activo WHERE idTipoDocumentoPersona=@id",P("@activo",(bool?)data["Activo"]??false),P("@id",id));
+     var actual=Row("SELECT Codigo FROM dbo.TipoDocumentoPersona WHERE idTipoDocumentoPersona=@id",P("@id",id));
+     bool activo=(bool?)data["Activo"]??false;
+     // Estos codigos se utilizan para completar y aprobar el alta de socios.
+     if(!activo && new[]{"Domicilio","DniFrente","DniDorso"}.Contains((string)actual["Codigo"],StringComparer.OrdinalIgnoreCase))throw new ArgumentException("No se pueden desactivar los tipos requeridos para el alta de socios.");
+     db.Database.ExecuteSqlCommand("UPDATE dbo.TipoDocumentoPersona SET Activo=@activo WHERE idTipoDocumentoPersona=@id",P("@activo",activo),P("@id",id));
     } else {
-     var codigo=Texto(data,"Codigo",40,true);var grupo=Texto(data,"Grupo",50,true);
+     var nombre=Texto(data,"Nombre",120,true);
+     var codigo=Texto(data,"Codigo",40);var grupo=Texto(data,"Grupo",50);
+     // Los clientes anteriores solo enviaban Nombre; completar los campos obligatorios.
+     if(string.IsNullOrEmpty(codigo))codigo="DOC_"+Guid.NewGuid().ToString("N");
+     if(string.IsNullOrEmpty(grupo))grupo="Otros documentos";
      db.Database.ExecuteSqlCommand("INSERT dbo.TipoDocumentoPersona(Codigo,Nombre,Grupo) VALUES(@codigo,@nombre,@grupo)",P("@codigo",codigo),P("@nombre",nombre),P("@grupo",grupo));
+     data["Codigo"]=codigo;data["Grupo"]=grupo;
     }
    } else {
     var areaRow=Row("SELECT * FROM dbo.AreaLaboral WHERE Codigo=@a",P("@a",area));

@@ -9,6 +9,7 @@ using System.Net;
 using System.Security.Claims;
 using System.Web.Http;
 using CooperativaAPI.Filters;
+using CooperativaAPI.Services;
 
 namespace CooperativaAPI.Controllers
 {
@@ -189,42 +190,49 @@ ORDER BY t.Fecha DESC, t.Hora DESC;", connection))
         {
             try
             {
-                var turnoActual = ObtenerTurnoPorId(idTurno);
-                if (turnoActual == null) return NotFound();
-                if (User.IsInRole("Socio") && ObtenerClaimEntero("idSocio") != turnoActual.IdSocio)
-                    return Content(HttpStatusCode.Forbidden, "No puedes cancelar turnos de otro socio.");
-                if (turnoActual.IdEstadoTurno == 5)
-                    return Ok(ObtenerTurnoDto(idTurno));
-                if (turnoActual.IdEstadoTurno == 4)
-                    return Content(HttpStatusCode.Conflict, "Un turno rechazado no puede cancelarse.");
-
                 using (var connection = CrearConexion())
                 {
                     connection.Open();
+                    using (var transaction = connection.BeginTransaction(IsolationLevel.Serializable))
+                    {
+                        var turnoActual = ObtenerTurnoRow(connection, transaction, idTurno);
+                        if (turnoActual == null) return NotFound();
+                        if (User.IsInRole("Socio") && ObtenerClaimEntero("idSocio") != turnoActual.IdSocio)
+                            return Content(HttpStatusCode.Forbidden, "No puedes cancelar turnos de otro socio.");
+                        if (turnoActual.IdEstadoTurno == 5)
+                        {
+                            transaction.Rollback();
+                            return Ok(ObtenerTurnoDto(idTurno));
+                        }
+                        if (turnoActual.IdEstadoTurno == 4)
+                            return Content(HttpStatusCode.Conflict, "Un turno rechazado no puede cancelarse.");
 
-                    using (var command = new SqlCommand(@"
+                        using (var command = new SqlCommand(@"
 UPDATE dbo.Turnos
 SET IdEstadoTurno = 5,
     FechaPropuesta = NULL,
     HoraPropuesta = NULL,
     FechaActualizacion = SYSUTCDATETIME()
 WHERE IdTurno = @IdTurno
-  AND IdEstadoTurno NOT IN (4, 5);", connection))
-                    {
-                        command.Parameters.Add("@IdTurno", SqlDbType.Int).Value = idTurno;
+  AND IdEstadoTurno NOT IN (4, 5);", connection, transaction))
+                        {
+                            command.Parameters.Add("@IdTurno", SqlDbType.Int).Value = idTurno;
+                            if (command.ExecuteNonQuery() == 0)
+                                return Content(HttpStatusCode.Conflict, "El turno no se puede cancelar en su estado actual.");
+                        }
 
-                        int filasAfectadas = command.ExecuteNonQuery();
-
-                        if (filasAfectadas == 0)
-                            return Content(HttpStatusCode.Conflict, "El turno no se puede cancelar en su estado actual.");
+                        var auditoria = AuditarTurno(connection, transaction, idTurno,
+                            turnoActual.IdEstadoTurno.ToString(), "5", "CancelarTurno", null);
+                        NotificarTurno(connection, transaction, turnoActual, auditoria);
+                        transaction.Commit();
                     }
                 }
-
                 return Ok(ObtenerTurnoDto(idTurno));
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                return BadRequest(ex.Message);
+                return Content(HttpStatusCode.InternalServerError,
+                    "No se pudo cancelar el turno. Intenta nuevamente.");
             }
         }
 
@@ -431,23 +439,36 @@ ORDER BY
                         }
 
                         if(estadoId.Value==4 && string.IsNullOrWhiteSpace(request.ObservacionAdmin))return BadRequest("Indicá el motivo del rechazo.");
-                        AuditarTurno(connection,transaction,idTurno,turno.IdEstadoTurno.ToString(),estadoId.Value.ToString(),"DecidirTurno",request.ObservacionAdmin);
+                        var auditoria = AuditarTurno(connection,transaction,idTurno,turno.IdEstadoTurno.ToString(),estadoId.Value.ToString(),"DecidirTurno",request.ObservacionAdmin);
+                        NotificarTurno(connection, transaction, turno, auditoria);
                         transaction.Commit();
                     }
                 }
 
                 return Ok(ObtenerTurnoDto(idTurno));
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                return BadRequest(ex.Message);
+                return Content(HttpStatusCode.InternalServerError,
+                    "No se pudo actualizar el turno. Intenta nuevamente.");
             }
         }
 
-        private void AuditarTurno(SqlConnection c,SqlTransaction tx,int id,string antes,string despues,string accion,string motivo) {
-            using(var cmd=new SqlCommand(@"INSERT dbo.AuditoriaLaboral(Area,idUsuarioSistema,idEmpleado,Accion,EstadoAnterior,EstadoNuevo,Motivo,Datos) VALUES('ADMINISTRACION',@u,@e,@a,@antes,@nuevo,@motivo,@datos)",c,tx)) {
+        private void NotificarTurno(SqlConnection connection, SqlTransaction transaction, TurnoRow anterior, long auditoria)
+        {
+            var actual = ObtenerTurnoRow(connection, transaction, anterior.IdTurno);
+            if (actual == null) throw new InvalidOperationException("No se pudo verificar la transicion.");
+            var aviso = AvisosService.ParaTurno(actual.IdTurno, auditoria, anterior.IdEstadoTurno, actual.IdEstadoTurno,
+                actual.IdEstadoTurno == 3 ? actual.FechaPropuesta.Value : actual.Fecha,
+                actual.IdEstadoTurno == 3 ? actual.HoraPropuesta.Value : actual.Hora,
+                anterior.FechaPropuesta, anterior.HoraPropuesta);
+            if (aviso != null) AvisosService.GenerarPersonal(connection, transaction, actual.IdSocio, aviso);
+        }
+
+        private long AuditarTurno(SqlConnection c,SqlTransaction tx,int id,string antes,string despues,string accion,string motivo) {
+            using(var cmd=new SqlCommand(@"INSERT dbo.AuditoriaLaboral(Area,idUsuarioSistema,idEmpleado,Accion,EstadoAnterior,EstadoNuevo,Motivo,Datos) OUTPUT INSERTED.idAuditoria VALUES('ADMINISTRACION',@u,@e,@a,@antes,@nuevo,@motivo,@datos)",c,tx)) {
                 cmd.Parameters.AddWithValue("@u",ObtenerClaimEntero("idUsuarioSistema"));cmd.Parameters.AddWithValue("@e",(object)ObtenerClaimEntero("idEmpleado")??DBNull.Value);
-                cmd.Parameters.AddWithValue("@a",accion);cmd.Parameters.AddWithValue("@antes",(object)antes??DBNull.Value);cmd.Parameters.AddWithValue("@nuevo",(object)despues??DBNull.Value);cmd.Parameters.AddWithValue("@motivo",(object)motivo??DBNull.Value);cmd.Parameters.AddWithValue("@datos",Newtonsoft.Json.JsonConvert.SerializeObject(new{idTurno=id}));cmd.ExecuteNonQuery();
+                cmd.Parameters.AddWithValue("@a",accion);cmd.Parameters.AddWithValue("@antes",(object)antes??DBNull.Value);cmd.Parameters.AddWithValue("@nuevo",(object)despues??DBNull.Value);cmd.Parameters.AddWithValue("@motivo",(object)motivo??DBNull.Value);cmd.Parameters.AddWithValue("@datos",Newtonsoft.Json.JsonConvert.SerializeObject(new{idTurno=id}));return Convert.ToInt64(cmd.ExecuteScalar());
             }
         }
         private const string QueryTurnosBase = @"
@@ -519,7 +540,9 @@ WHERE t.IdTurno = @IdTurno;", connection))
 
         private TurnoRow ObtenerTurnoRow(SqlConnection connection, SqlTransaction transaction, int idTurno)
         {
-            using (var command = new SqlCommand(QueryTurnosBase + @"
+            var query = transaction == null ? QueryTurnosBase
+                : QueryTurnosBase.Replace("FROM dbo.Turnos t", "FROM dbo.Turnos t WITH (UPDLOCK,HOLDLOCK)");
+            using (var command = new SqlCommand(query + @"
 WHERE t.IdTurno = @IdTurno;", connection, transaction))
             {
                 command.Parameters.Add("@IdTurno", SqlDbType.Int).Value = idTurno;

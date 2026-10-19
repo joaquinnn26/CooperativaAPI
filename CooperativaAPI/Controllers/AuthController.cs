@@ -1,7 +1,5 @@
 ﻿using System;
-using System.Configuration;
 using System.Linq;
-using System.Net.Mail;
 using System.Runtime.Caching;
 using System.Security.Claims;
 using System.Security.Cryptography;
@@ -169,38 +167,38 @@ namespace CooperativaAPI.Controllers
             if (string.IsNullOrWhiteSpace(email))
                 return BadRequest("El correo electronico es obligatorio.");
 
-            var usuario = db.UsuarioSistema
-                .Include(u => u.Socio2.Persona)
-                .Where(u => (u.Socio2.Persona.Email.ToLower()==email || u.Empleado.Persona.Email.ToLower()==email || (u.Rol.NombreRol=="Administrador" && u.Usuario.ToLower()==email)) && u.Rol.NombreRol==request.TipoAcceso).SingleOrDefault();
+            if (request.TipoAcceso != "Socio" && request.TipoAcceso != "Empleado")
+                return BadRequest("El tipo de acceso debe ser Socio o Empleado.");
 
-            if (usuario != null)
+            RecoverySmtpSettings smtpSettings;
+            if (!RecoverySmtpSettings.TryLoad(out smtpSettings))
             {
-                var token = CrearTokenSeguro();
-                var cacheKey = ClaveRecuperacion(email, token);
-                MemoryCache.Default.Set(
-                    cacheKey,
-                    usuario.idUsuarioSistema,
-                    DateTimeOffset.UtcNow.AddMinutes(30));
-
-                var exponerToken = string.Equals(
-                    ConfigurationManager.AppSettings["ExposePasswordResetToken"],
-                    "true",
-                    StringComparison.OrdinalIgnoreCase);
-
-                if (exponerToken)
-                    return Ok(new { mensaje = MensajeRecuperacion(), resetToken = token });
-
-                try
-                {
-                    EnviarCorreoRecuperacion(email, token);
-                }
-                catch (Exception)
-                {
-                    MemoryCache.Default.Remove(cacheKey);
-                    return InternalServerError();
-                }
+                System.Diagnostics.Trace.TraceError("COSPRAL_RECOVERY_SMTP_UNAVAILABLE");
+                return Content(System.Net.HttpStatusCode.ServiceUnavailable, new { Message = "La recuperacion por correo no esta disponible temporalmente. Intenta mas tarde o contacta a la cooperativa." });
             }
 
+            string cacheKey = null;
+            try
+            {
+                var usuario = db.UsuarioSistema
+                    .Include(u => u.Socio2.Persona)
+                    .Where(u => (u.Socio2.Persona.Email.ToLower()==email || u.Empleado.Persona.Email.ToLower()==email || (u.Rol.NombreRol=="Administrador" && u.Usuario.ToLower()==email))
+                        && ((request.TipoAcceso == "Socio" && u.Rol.NombreRol == "Socio")
+                            || (request.TipoAcceso == "Empleado" && (u.Rol.NombreRol == "Empleado" || u.Rol.NombreRol == "Administrador")))).SingleOrDefault();
+                if (usuario != null)
+                {
+                    var token = CrearTokenSeguro();
+                    cacheKey = ClaveRecuperacion(email, token);
+                    MemoryCache.Default.Set(cacheKey, usuario.idUsuarioSistema, DateTimeOffset.UtcNow.AddMinutes(30));
+                    new RecoveryMailService(smtpSettings).SendRecovery(email, token);
+                }
+            }
+            catch (Exception)
+            {
+                if (cacheKey != null) MemoryCache.Default.Remove(cacheKey);
+                // No revelar la existencia de cuentas ni registrar datos del correo.
+                System.Diagnostics.Trace.TraceError("COSPRAL_RECOVERY_REQUEST_FAILED");
+            }
             return Ok(new { mensaje = MensajeRecuperacion() });
         }
 
@@ -282,29 +280,7 @@ namespace CooperativaAPI.Controllers
 
         private static string MensajeRecuperacion()
         {
-            return "Si el correo existe, se genero una solicitud de recuperacion valida por 30 minutos.";
-        }
-
-        private static void EnviarCorreoRecuperacion(string email, string token)
-        {
-            var frontendUrl = (ConfigurationManager.AppSettings["FrontendUrl"] ?? "http://localhost:5173")
-                .TrimEnd('/');
-            var link = frontendUrl +
-                "/recuperar-contrasena?email=" + Uri.EscapeDataString(email) +
-                "&token=" + Uri.EscapeDataString(token);
-
-            using (var message = new MailMessage())
-            {
-                message.To.Add(email);
-                message.Subject = "Recuperacion de contrasena";
-                message.Body =
-                    "Se solicito restablecer tu contrasena. El enlace vence en 30 minutos:\r\n\r\n" +
-                    link +
-                    "\r\n\r\nSi no realizaste esta solicitud, ignora este mensaje.";
-
-                using (var smtp = new SmtpClient())
-                    smtp.Send(message);
-            }
+            return "Si el correo corresponde a una cuenta, recibiras instrucciones para recuperar el acceso. El enlace vence en 30 minutos.";
         }
     }
 
