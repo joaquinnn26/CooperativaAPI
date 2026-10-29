@@ -201,15 +201,16 @@ namespace CooperativaAPI.Controllers {
    var op=datos.ToObject<SeleccionMedidor>();
    if(!op.Lectura.HasValue || op.Lectura.Value<0)throw new ArgumentException("Registrá una lectura inicial válida, igual o mayor que cero.");
    if((op.idMedidor.GetValueOrDefault()>0)==(op.NuevoMedidor!=null))throw new ArgumentException("Elegí un equipo del inventario o registrá un medidor nuevo.");
-   string tipoEsperado=area=="AGUA"?"Agua":"Electrico";
+   string tipoEsperado=area=="AGUA"?"agua":"electrico";
    if(op.NuevoMedidor!=null){
     var n=op.NuevoMedidor;
     if(string.IsNullOrWhiteSpace(n.Numero) || n.Numero.Trim().Length>50 || (n.Marca??"").Length>100 || (n.Modelo??"").Length>100)throw new ArgumentException("Completá correctamente el número, marca y modelo del medidor.");
-    if(!db.TipoMedidor.Any(x=>x.idTipoMedidor==n.idTipoMedidor && x.Nombre==tipoEsperado))throw new ArgumentException("El tipo de medidor no corresponde al servicio solicitado.");
+    var tipo=db.TipoMedidor.Find(n.idTipoMedidor);
+    if(tipo==null || OperacionesMedidor.Normalizar(tipo.Nombre)!=tipoEsperado)throw new ArgumentException("El tipo de medidor no corresponde al servicio solicitado.");
     if(db.Medidor.Any(x=>x.Numero==n.Numero.Trim()))throw new ArgumentException("El número del medidor ya existe. Seleccionalo desde el inventario si está disponible.");
    } else {
     var ficha=OperacionesMedidor.Ficha(db,op.idMedidor.Value);
-    if(ficha==null || !ficha.IdentidadVerificada || ficha.EstadoFisico!="Operativo" || ficha.idAsignacion.HasValue || ficha.Tipo!=tipoEsperado)throw new ArgumentException("El medidor seleccionado ya no está disponible o no corresponde al servicio.");
+    if(ficha==null || !ficha.IdentidadVerificada || ficha.EstadoFisico!="Operativo" || ficha.idAsignacion.HasValue || OperacionesMedidor.Normalizar(ficha.Tipo)!=tipoEsperado)throw new ArgumentException("El medidor seleccionado ya no está disponible o no corresponde al servicio.");
     if(op.Version!=Convert.ToBase64String(ficha.Version))throw new DBConcurrencyException("El medidor cambió. Volvé a seleccionarlo antes de continuar.");
    }
   }

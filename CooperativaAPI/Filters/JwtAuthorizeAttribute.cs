@@ -29,6 +29,12 @@ namespace CooperativaAPI.Filters
             {
                 var request = actionContext.Request;
 
+                // 1. PERMITIR CORS (PREFLIGHT): Si la petición es OPTIONS, la dejamos pasar sin validar token
+                if (request.Method == HttpMethod.Options)
+                {
+                    return; // Permite que la petición OPTIONS continúe sin error
+                }
+
                 // Validar header Authorization
                 var authHeader = request.Headers.Authorization;
 
@@ -86,8 +92,8 @@ namespace CooperativaAPI.Filters
                     if (usuario == null ||
                         string.IsNullOrWhiteSpace(rolActual) ||
                         !string.Equals(rolToken, rolActual, StringComparison.OrdinalIgnoreCase) ||
-                        (rolActual=="Socio" && (usuario.Socio2==null || usuario.Socio2.Activo!=true) && !altaPendiente) ||
-                        (rolActual!="Socio" && usuario.Empleado!=null && usuario.Empleado.Activo!=true) || (rolActual=="Empleado" && usuario.Empleado==null))
+                        (rolActual == "Socio" && (usuario.Socio2 == null || usuario.Socio2.Activo != true) && !altaPendiente) ||
+                        (rolActual != "Socio" && usuario.Empleado != null && usuario.Empleado.Activo != true) || (rolActual == "Empleado" && usuario.Empleado == null))
                     {
                         actionContext.Response = request.CreateResponse(HttpStatusCode.Unauthorized);
                         return;
@@ -105,17 +111,20 @@ namespace CooperativaAPI.Filters
                     }
                 }
 
-                using(var permisos=new CooperativaEntities()) {
+                using (var permisos = new CooperativaEntities())
+                {
                     // El vínculo del token también debe coincidir con la cuenta actual.
-                    var actual=permisos.UsuarioSistema.Find(idUsuario);
-                    int tokenEmployee,tokenSocio;
-                    var e=identity.FindFirst("idEmpleado")?.Value; var s=identity.FindFirst("idSocio")?.Value;
-                    if((!string.IsNullOrEmpty(e) && (!int.TryParse(e,out tokenEmployee) || actual.idEmpleado!=tokenEmployee || actual.Rol.NombreRol=="Socio")) ||
-                       (!string.IsNullOrEmpty(s) && (!int.TryParse(s,out tokenSocio) || actual.idSocio!=tokenSocio))) {
-                        actionContext.Response=request.CreateResponse(HttpStatusCode.Unauthorized); return;
+                    var actual = permisos.UsuarioSistema.Find(idUsuario);
+                    int tokenEmployee, tokenSocio;
+                    var e = identity.FindFirst("idEmpleado")?.Value; var s = identity.FindFirst("idSocio")?.Value;
+                    if ((!string.IsNullOrEmpty(e) && (!int.TryParse(e, out tokenEmployee) || actual.idEmpleado != tokenEmployee || actual.Rol.NombreRol == "Socio")) ||
+                        (!string.IsNullOrEmpty(s) && (!int.TryParse(s, out tokenSocio) || actual.idSocio != tokenSocio)))
+                    {
+                        actionContext.Response = request.CreateResponse(HttpStatusCode.Unauthorized); return;
                     }
-                    if(!CooperativaAPI.Controllers.LaboralAccess.LegacyGate(permisos,principal,actionContext.ControllerContext.ControllerDescriptor.ControllerName,actionContext.ActionDescriptor.ActionName,request.Method.Method)) {
-                        actionContext.Response=request.CreateResponse(HttpStatusCode.Forbidden,new {message="Esta operación requiere el flujo laboral y la autorización del área correspondiente."}); return;
+                    if (!CooperativaAPI.Controllers.LaboralAccess.LegacyGate(permisos, principal, actionContext.ControllerContext.ControllerDescriptor.ControllerName, actionContext.ActionDescriptor.ActionName, request.Method.Method))
+                    {
+                        actionContext.Response = request.CreateResponse(HttpStatusCode.Forbidden, new { message = "Esta operación requiere el flujo laboral y la autorización del área correspondiente." }); return;
                     }
                 }
                 if (!string.IsNullOrWhiteSpace(Roles))

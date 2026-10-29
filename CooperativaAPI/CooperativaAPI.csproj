@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="15.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="..\packages\Microsoft.CodeDom.Providers.DotNetCompilerPlatform.2.0.1\build\net46\Microsoft.CodeDom.Providers.DotNetCompilerPlatform.props" Condition="Exists('..\packages\Microsoft.CodeDom.Providers.DotNetCompilerPlatform.2.0.1\build\net46\Microsoft.CodeDom.Providers.DotNetCompilerPlatform.props')" />
   <Import Project="..\packages\EntityFramework.6.5.1\build\EntityFramework.props" Condition="Exists('..\packages\EntityFramework.6.5.1\build\EntityFramework.props')" />
@@ -394,6 +394,7 @@
     <Content Include="Areas\HelpPage\Views\Help\DisplayTemplates\CollectionModelDescription.cshtml" />
     <Content Include="Areas\HelpPage\Views\Help\DisplayTemplates\ApiGroup.cshtml" />
     <Content Include="Areas\HelpPage\Views\Help\Api.cshtml" />
+    <None Include="Properties\PublishProfiles\site99439-WebDeploy.pubxml" />
     <None Include="Scripts\jquery-3.4.1.intellisense.js" />
     <Content Include="Scripts\jquery-3.4.1.js" />
     <Content Include="Scripts\jquery-3.4.1.min.js" />
@@ -524,23 +525,67 @@
   <ItemGroup>
     <Content Include="Data\20260928_VistasLaborales.sql" />
   </ItemGroup>
-  <ItemGroup><Compile Include="Controllers\LaboralAccess.cs" /></ItemGroup>
-  <ItemGroup><Compile Include="Controllers\LaboralArchivos.cs" /></ItemGroup>
-  <ItemGroup><Compile Include="Controllers\LaboralConsultas.cs" /></ItemGroup>
-  <ItemGroup><Compile Include="Controllers\LaboralController.cs" /></ItemGroup>
-  <ItemGroup><Compile Include="Controllers\LaboralTareas.cs" /></ItemGroup>
-  <ItemGroup><Compile Include="Controllers\SocioAltaController.cs" /><Compile Include="Controllers\AdhesionesController.cs" /><Compile Include="Data\AdhesionesBeneficios.cs" /><Compile Include="Data\ConceptosBeneficios.cs" /></ItemGroup>
-  <ItemGroup><Content Include="Data\20261016_AdhesionesBeneficios.sql" /></ItemGroup>
-  <ItemGroup><Compile Include="Controllers\EventosOperativosController.cs" /></ItemGroup>
-  <ItemGroup><Content Include="Data\20260930_AltaSocioRevision.sql" /></ItemGroup>
-  <ItemGroup><Content Include="Data\20260930_UnificarDocumentosCaducidadRutas.sql" /></ItemGroup>
-  <ItemGroup><Content Include="Data\20261001_EventosOperativos.sql" /></ItemGroup>
-  <ItemGroup><Content Include="Data\20261002_MotivosPredefinidos.sql" /></ItemGroup>
-  <ItemGroup><Content Include="Data\20261002_IntegridadCooperativa.sql" /></ItemGroup>
-  <ItemGroup><Content Include="Data\20261002_NormalizacionRelacional.sql" /></ItemGroup>
-  <ItemGroup><Content Include="Data\20261002_NormalizarAsignacionMedidor.sql" /></ItemGroup>
-  <ItemGroup><Content Include="Data\20261002_NormalizarMedidor.sql" /></ItemGroup>
-  <ItemGroup><Content Include="Data\20261002_NormalizarDocumentos.sql" /></ItemGroup>
-  <ItemGroup><Compile Include="Controllers\InternetFacturacionController.cs" /></ItemGroup>
-  <ItemGroup><Content Include="Data\20261012_FacturacionInternetArchivos.sql" /><Content Include="Data\20261013_EstadisticasMotivos.sql" /><Content Include="Data\20261014_IncidenciasMedidor.sql" /><Content Include="Data\20261015_DocumentosLegajoSolicitud.sql" /></ItemGroup>
+  <ItemGroup>
+    <Compile Include="Controllers\LaboralAccess.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Controllers\LaboralArchivos.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Controllers\LaboralConsultas.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Controllers\LaboralController.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Controllers\LaboralTareas.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Controllers\SocioAltaController.cs" />
+    <Compile Include="Controllers\AdhesionesController.cs" />
+    <Compile Include="Data\AdhesionesBeneficios.cs" />
+    <Compile Include="Data\ConceptosBeneficios.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="Data\20261016_AdhesionesBeneficios.sql" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Controllers\EventosOperativosController.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="Data\20260930_AltaSocioRevision.sql" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="Data\20260930_UnificarDocumentosCaducidadRutas.sql" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="Data\20261001_EventosOperativos.sql" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="Data\20261002_MotivosPredefinidos.sql" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="Data\20261002_IntegridadCooperativa.sql" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="Data\20261002_NormalizacionRelacional.sql" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="Data\20261002_NormalizarAsignacionMedidor.sql" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="Data\20261002_NormalizarMedidor.sql" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="Data\20261002_NormalizarDocumentos.sql" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Controllers\InternetFacturacionController.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="Data\20261012_FacturacionInternetArchivos.sql" />
+    <Content Include="Data\20261013_EstadisticasMotivos.sql" />
+    <Content Include="Data\20261014_IncidenciasMedidor.sql" />
+    <Content Include="Data\20261015_DocumentosLegajoSolicitud.sql" />
+  </ItemGroup>
 </Project>

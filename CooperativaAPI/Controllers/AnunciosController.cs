@@ -13,7 +13,12 @@ namespace CooperativaAPI.Controllers
     public class AnunciosController : ApiController
     {
         private readonly AppDbContext db = new AppDbContext();
-
+        [HttpGet]
+        [Route("test")]
+        IHttpActionResult Test()
+        {
+            return Ok(new { mensaje = "¡La API está viva!" });
+        }
         [HttpGet]
         [Route("")]
         public IHttpActionResult ObtenerActivos()

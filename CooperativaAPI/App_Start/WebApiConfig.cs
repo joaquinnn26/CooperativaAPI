@@ -10,13 +10,10 @@ namespace CooperativaAPI
     {
         public static void Register(HttpConfiguration config)
         {
+            // Permitimos peticiones desde Vercel y desde tu localhost para desarrollo
+            var allowedOrigins = "https://cooperativa-1zwrdb37h-joaquin-86e7.vercel.app,http://localhost:5173,http://127.0.0.1:5173";
 
-            var frontendUrl = ConfigurationManager.AppSettings["FrontendUrl"] ?? "http://localhost:5173";
-            var cors = new EnableCorsAttribute(
-                frontendUrl.TrimEnd('/') + ",http://127.0.0.1:5173",
-                "*",
-                "GET,POST,PUT,DELETE,OPTIONS");
-
+            var cors = new EnableCorsAttribute(allowedOrigins, "*", "GET,POST,PUT,DELETE,OPTIONS");
             config.EnableCors(cors);
 
             config.MapHttpAttributeRoutes();

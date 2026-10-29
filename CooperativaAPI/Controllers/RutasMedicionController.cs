@@ -26,6 +26,21 @@ namespace CooperativaAPI.Controllers
             "Medido", "NoAcceso", "MedidorDanado", "Observado"
         };
 
+        private static DateTime FechaOperativaArgentina()
+        {
+            TimeZoneInfo zonaArgentina;
+            try
+            {
+                zonaArgentina = TimeZoneInfo.FindSystemTimeZoneById("Argentina Standard Time");
+            }
+            catch (TimeZoneNotFoundException)
+            {
+                zonaArgentina = TimeZoneInfo.FindSystemTimeZoneById("America/Argentina/Buenos_Aires");
+            }
+
+            return TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, zonaArgentina).Date;
+        }
+
         [HttpGet]
         [Route("")]
         [JwtAuthorize(Roles = "Administrador,Empleado")]
@@ -346,8 +361,12 @@ namespace CooperativaAPI.Controllers
                         return BadRequest("La lectura actual no puede ser menor a la lectura anterior.");
                     }
 
-                    if(request.FechaLectura.HasValue && request.FechaLectura.Value.Date!=DateTime.Today)return BadRequest("La lectura debe registrarse en la fecha actual.");
-                    var fechaLectura = DateTime.UtcNow;
+                    var fechaLectura = FechaOperativaArgentina();
+                    if (request.FechaLectura.HasValue && request.FechaLectura.Value.Date != fechaLectura)
+                    {
+                        transaction.Rollback();
+                        return BadRequest("La lectura debe registrarse en la fecha actual.");
+                    }
                     var medicion = new Medicion
                     {
                         idServicioSocio = medidor.idServicioSocio.Value,
